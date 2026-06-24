@@ -1,0 +1,82 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+  /* Thema-tokens (licht). Donker zet ze hieronder om. */
+  --surface: #ffffff;
+  --surface-2: #f1f7fe;
+  --text: #1a1a1a;
+  --text-muted: #555;
+  --border: #e3e3e3;
+  --accent: #1e88e5;
+}
+
+:root[data-theme='dark'] {
+  --surface: #1c1f23;
+  --surface-2: #243140;
+  --text: #f0f0f0;
+  --text-muted: #aeb6c0;
+  --border: #333a42;
+  --accent: #4aa3ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+/* "Jij bent hier"-stip. Staat global (MapLibre zet het marker-element
+   buiten de scoped-styles van het component). */
+.me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1e88e5;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.4);
+}
+
+/* Bestemmings-pin (📍). */
+.dest-pin {
+  font-size: 26px;
+  line-height: 1;
+  cursor: default;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+
+/* Rijdende positie tijdens (gesimuleerde) navigatie. */
+/* Richtingspijl tijdens navigatie (kaart draait mee → pijl wijst vooruit). */
+.nav-dot {
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 22px solid #1e88e5;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+/* Meldings-pin (🚓 ⚙️ 🚑 ⚠️ 🚧). */
+.report-pin {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}

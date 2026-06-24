@@ -1,0 +1,16 @@
+{
+  "name": "scooter-nav-api",
+  "private": true,
+  "type": "module",
+  "description": "Eigen REST-API voor Scooter-Nav meldingen (Track B).",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "google-auth-library": "^10.7.0",
+    "pg": "^8.13.1"
+  }
+}

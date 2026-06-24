@@ -1,0 +1,26 @@
+# Self-hosted Valhalla voor scooter-routing (Fase 2).
+#
+# Starten:   docker compose up -d
+# Volgen:    docker compose logs -f
+#
+# LET OP: de eerste keer downloadt + bouwt dit de routekaart (tiles). Dat kan lang
+# duren en vraagt een paar GB RAM/schijf. Daarna start het snel en serveert op :8002.
+services:
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: scooter-valhalla
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./custom_files:/custom_files
+    environment:
+      # Heel Nederland. Voor snellere builds tijdens ontwikkelen: gebruik een kleiner
+      # extract (alleen Purmerend/omgeving) en wijs tile_urls daarnaar. Zie README.
+      - tile_urls=https://download.geofabrik.de/europe/netherlands-latest.osm.pbf
+      - serve_tiles=True
+      - build_elevation=False
+      - build_admins=True
+      - build_time_zones=False
+      # Zet op True als je de tiles wilt herbouwen na een nieuw extract:
+      - force_rebuild=False
+    restart: unless-stopped
