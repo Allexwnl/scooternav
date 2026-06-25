@@ -132,7 +132,6 @@ onMounted(() => {
     drawDestination()
     drawReports()
     drawClosures()
-    drawNav()
   })
 
   m.on('error', (e) => {
@@ -161,8 +160,12 @@ function startLocation(m: MlMap) {
   let firstFix = true
   stopWatch = location.watch(
     (pos) => {
-      meMarker!.setLngLat([pos.lng, pos.lat]).addTo(m)
       emit('position', { lng: pos.lng, lat: pos.lat, speed: pos.speed ?? null })
+      if (props.navActive) {
+        meMarker?.remove() // tijdens navigatie alleen de richtingspijl, niet ook de GPS-stip
+        return
+      }
+      meMarker!.setLngLat([pos.lng, pos.lat]).addTo(m)
       if (firstFix) {
         m.easeTo({ center: [pos.lng, pos.lat], zoom: 15 })
         firstFix = false
@@ -263,39 +266,58 @@ watch(
   },
 )
 
-function drawNav() {
+// Vloeiend volgen (Waze-stijl): per frame de pijl + camera naar de doelpositie laten
+// glijden i.p.v. per GPS-fix te springen.
+let navAnimId: number | null = null
+let navCur: { lng: number; lat: number } | null = null
+let navCurBearing = 0
+
+function navFrame() {
   const m = map.value
-  if (!m) return
-  if (props.navPosition) {
-    if (!navMarker) {
-      const el = document.createElement('div')
-      el.className = 'nav-dot'
-      navMarker = new Marker({ element: el })
-    }
-    navMarker.setLngLat([props.navPosition.lng, props.navPosition.lat]).addTo(m)
-    if (props.navActive) {
-      // Third-person: gekanteld, ingezoomd, meedraaiend met de rijrichting (Waze-stijl).
-      m.easeTo({
-        center: [props.navPosition.lng, props.navPosition.lat],
-        bearing: props.navBearing,
-        pitch: 60,
-        zoom: 17,
-        duration: 280,
-      })
-    } else {
-      m.easeTo({ center: [props.navPosition.lng, props.navPosition.lat], duration: 200 })
-    }
-  } else if (navMarker) {
-    navMarker.remove()
+  const target = props.navPosition
+  if (!m || !props.navActive || !target) {
+    navAnimId = null
+    return
   }
+  if (!navMarker) {
+    const el = document.createElement('div')
+    el.className = 'nav-dot'
+    navMarker = new Marker({ element: el })
+  }
+  navMarker.addTo(m)
+  if (!navCur) navCur = { lng: target.lng, lat: target.lat }
+  navCur.lng += (target.lng - navCur.lng) * 0.18
+  navCur.lat += (target.lat - navCur.lat) * 0.18
+  const diff = ((props.navBearing - navCurBearing + 540) % 360) - 180 // kortste hoek
+  navCurBearing = (navCurBearing + diff * 0.18 + 360) % 360
+  navMarker.setLngLat([navCur.lng, navCur.lat])
+  m.setCenter([navCur.lng, navCur.lat])
+  m.setBearing(navCurBearing)
+  navAnimId = requestAnimationFrame(navFrame)
 }
-watch(() => props.navPosition, drawNav)
+function startNavAnim() {
+  navCur = null
+  navCurBearing = props.navBearing
+  if (navAnimId == null) navAnimId = requestAnimationFrame(navFrame)
+}
+function stopNavAnim() {
+  if (navAnimId != null) {
+    cancelAnimationFrame(navAnimId)
+    navAnimId = null
+  }
+  navCur = null
+  navMarker?.remove()
+}
 watch(
   () => props.navActive,
   (on) => {
     const m = map.value
     if (!m) return
-    if (!on) {
+    if (on) {
+      m.easeTo({ pitch: 60, zoom: 17, duration: 500 }) // third-person; daarna volgt de animatie
+      startNavAnim()
+    } else {
+      stopNavAnim()
       m.easeTo({ pitch: 0, bearing: 0, duration: 400 }) // terug naar plat noord-boven
       fitToRoutes()
     }
@@ -311,6 +333,7 @@ watch(
 )
 
 onUnmounted(() => {
+  stopNavAnim()
   stopWatch?.()
   map.value?.remove()
 })
