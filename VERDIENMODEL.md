@@ -1,56 +1,57 @@
-# Verdienmodel — scooter-nav (later uit te werken)
+# Verdiensplan — Scooter-Nav
 
-> Losstaand van de [ROADMAP.md](./ROADMAP.md). Dit is een **denkdocument** om later
-> uit te breiden — nog geen besluit. Uitgangspunt: eerst een goede, gratis app bouwen
-> die "leeft" in Purmerend; monetiseren pas als er genoeg gebruikers zijn.
+Concreet, gefaseerd plan. Kern: **eerst gratis groeien via de WhatsApp-groep, daarna
+freemium, advertenties pas bij schaal.** Onderscheid = de scooter-niche (kenteken-routes +
+rollerbank), niet "live verkeer" (dat heeft Waze, jij niet — zie [WAZE_VERGELIJKING.md](./WAZE_VERGELIJKING.md)).
 
-## Uitgangspunten
-- **Eerst gratis / passieproject.** Een betaalmuur of advertenties met 50 gebruikers jaagt
-  mensen weg en levert niets op.
-- **Schaal eerst, geld later.** Net als Waze: alle verdienmodellen hieronder werken pas
-  bij voldoende actieve gebruikers (zie het netwerk-effect in de roadmap).
-- **Vertrouwen niet verspelen.** Geen verkoop van persoonlijke locatiedata. Dat is bij
-  een meld-app (politie/rollerbank) extra gevoelig.
+## Wat moet je dekken (kosten)
+| Post | Kosten |
+|---|---|
+| VPS (Valhalla + API + Postgres) | ~€5–15/mnd |
+| Frontend (Netlify) | gratis |
+| Domeinnaam | ~€10/jaar |
+| Google Play (eenmalig) | $25 |
+| **Doel fase 1: ~€10–20/mnd dekken** | |
 
-## Opties (ruw, uit te werken)
+## Fase 1 — Lanceren (0 → ~1.000 gebruikers): **GRATIS**
+- **Geen ads, geen betaalmuur.** Focus volledig op community + retentie via je WhatsApp-groep.
+- **Donaties** als enige inkomsten: een "Steun de app"-knop (Tikkie / Buy Me a Coffee / Stripe).
+  Realistisch dekt dit vaak net de server.
+- Doel: **bewijzen dat mensen het gebruiken** (product-market-fit), niet winst.
+- Verwachte opbrengst: **€0–50/mnd** (donaties).
 
-### 1. Freemium  ⭐ (meest passend voor de beginfase)
-Gratis basis, kleine vergoeding voor extra's.
-- Mogelijke premium-functies: offline kaarten, meer historie, extra meldingsfilters,
-  stemmen naar keuze, geen (eventuele) ads.
-- **Voor:** voorspelbaar, niet afhankelijk van massale schaal, eerlijk.
-- **Tegen:** moet genoeg waarde bieden om voor te betalen.
+## Fase 2 — Groeien (~1k → 10k): **FREEMIUM** ⭐
+Gratis blijft volwaardig; **"Scooter-Nav Plus"** voor wie meer wil:
+- Suggestie-prijs: **€1,99/mnd**, **€14,99/jaar**, of eenmalig **€9,99**.
+- Plus-functies (premium-waarde, niet de basis uitkleden):
+  - offline kaarten, geen advertenties, extra stemmen/thema's,
+  - meer alert-instellingen (afstand, types), opgeslagen plekken-pro, ritgeschiedenis,
+  - een badge / hogere status in de community.
+- Rekenvoorbeeld: 5.000 actief × **3% betaalt** × €15/jaar ≈ **€2.250/jaar** (~€185/mnd) → ruim boven de kosten.
+- Donaties lopen door.
 
-### 2. Lokale advertenties (het Waze-model)
-Branded pins / promoties van lokale zaken (scooterdealers, onderdelen, tankstations).
-- **Voor:** gebruikers blijven gratis.
-- **Tegen:** **werkt alleen bij schaal**; vraagt een advertentie-verkoopkant. Pas later.
+## Fase 3 — Schaal (10k+): **ADVERTENTIES + B2B**
+- **Lokale advertenties / sponsored pins** (scooterdealers, onderdelen, verzekeraars,
+  tankstations) — het Waze-model. **Alleen tonen als je stilstaat** (veilig + Play-beleid).
+  Wordt pas zinvol bij **tienduizenden** gebruikers (eCPM ~€1–5).
+- **B2B-data**: geanonimiseerde, geaggregeerde knelpunt-data (gevaarlijke kruispunten/wegdek)
+  aan gemeenten/onderzoek. Waardevol, maar juridisch + privacy-werk; pas bij schaal.
 
-### 3. Donaties / "trakteer me op koffie"
-- **Voor:** simpel, past bij een community/passieproject.
-- **Tegen:** levert zelden structureel inkomen.
+## Mix per fase
+| Fase | Gebruikers | Verdienmodel | Doel |
+|---|---|---|---|
+| 1 | 0–1k | donaties | break-even op server |
+| 2 | 1k–10k | freemium (+donaties) | winstgevend in het klein |
+| 3 | 10k+ | ads + B2B (+freemium) | echte omzet |
 
-### 4. B2B / data-samenwerkingen
-Geanonimiseerde, geaggregeerde verkeers-/knelpuntdata voor gemeente of onderzoek.
-- **Voor:** kan waardevol zijn (bijv. gevaarlijke kruispunten).
-- **Tegen:** privacygevoelig, juridisch werk, en je hebt eerst data/schaal nodig.
+## Concrete eerste stappen
+1. Voeg een **donatie-knop** toe (Tikkie-link of Buy Me a Coffee) — nul werk, dekt de server.
+2. Bouw de **premium-haakjes** alvast in (een `isPlus`-vlag achter de Google-login), zodat
+   Plus later een kwestie is van features ontgrendelen.
+3. Houd **kosten laag**: blijf op de gratis tiers tot het echt loopt.
 
-### 5. Samenwerkingen
-Scooterrijscholen, verzekeraars, dealers — co-branding of verwijzingen.
-
-## Referentie: hoe Waze het doet
-Gratis app, eigendom van Google. Inkomsten vrijwel volledig uit **locatie-advertenties**
-(branded pins, promoted search, advertenties die alleen verschijnen als je stilstaat).
-Op zichzelf was Waze nooit een grote winstmachine — de waarde voor Google zit deels in
-de data. Les hieruit: een meld-/navigatie-app verdient pas bij grote schaal, dus reken
-daar niet op in de beginfase.
-
-## Voorgestelde volgorde
-1. **Gratis** tot er een actieve gebruikersgroep in Purmerend is.
-2. Daarna lichte **freemium** (1–2 premium-functies) als er vraag is.
-3. **Lokale advertenties** pas overwegen bij echte schaal in meerdere regio's.
-
-## Open vragen (later beantwoorden)
-- Wie is de doelgroep die zou betalen, en waarvoor precies?
-- Hosting-/serverkosten per maand vs. verwachte inkomsten — waar ligt break-even?
-- Hoe houden we het advertentievrij-gevoel als dat een kernwaarde wordt?
+## Eerlijke risico's
+- **Advertenties leveren bij kleine schaal vrijwel niets** — niet op rekenen vóór ~10k.
+- **Freemium werkt alleen met echte premium-waarde** — niet de gratis versie uitkleden.
+- **Live verkeer** (Waze's troef) heb je niet → win op de **niche**, niet op verkeer.
+- **Vertrouwen**: nooit persoonlijke locatiedata verkopen — bij een rollerbank-app dodelijk voor je community.

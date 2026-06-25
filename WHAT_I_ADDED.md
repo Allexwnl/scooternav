@@ -14,6 +14,11 @@ Een scooter-navigatie-app (blauw + geel kenteken) met **Waze-stijl community-mel
 navigatie met stem, en een veilige eigen backend met Google-login.
 
 ## Nieuw deze sessie (de eindsprint) ✨
+- 🟦 **Waze-style layout**: zoekbalk onderaan ("Waarheen?"), navigatie-onderbalk met
+  **aankomsttijd + resterende tijd/afstand**, **snelheids-pill**, "centreer op mij"-knop,
+  meld-grid (iconen-raster) en een richtingspijl.
+- 🐛 **Fix:** een tik op de kaart verandert je route niet meer als je er al een hebt gekozen
+  (gebruik "wissen" of de zoekbalk voor een nieuwe bestemming).
 - 🛰️ **Preciezere locatie** (voor echt rijden): high-accuracy GPS + de stip **"snapt" op de
   route** tijdens navigatie (geen zijwaartse sprongen) + een **richtingspijl**.
 - 🚲 **"Ga hier het fietspad op/af"**: detecteert fietspad↔weg-overgangen per kenteken

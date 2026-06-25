@@ -15,10 +15,11 @@ const props = defineProps<{
   navPosition: LngLat | null
   navActive: boolean
   navBearing: number
+  recenterSignal: number
 }>()
 
 const emit = defineEmits<{
-  position: [pos: LngLat]
+  position: [pos: { lng: number; lat: number; speed: number | null }]
   pick: [pos: LngLat]
   selectRoute: [index: number]
   selectReport: [id: string]
@@ -161,7 +162,7 @@ function startLocation(m: MlMap) {
   stopWatch = location.watch(
     (pos) => {
       meMarker!.setLngLat([pos.lng, pos.lat]).addTo(m)
-      emit('position', { lng: pos.lng, lat: pos.lat })
+      emit('position', { lng: pos.lng, lat: pos.lat, speed: pos.speed ?? null })
       if (firstFix) {
         m.easeTo({ center: [pos.lng, pos.lat], zoom: 15 })
         firstFix = false
@@ -298,6 +299,14 @@ watch(
       m.easeTo({ pitch: 0, bearing: 0, duration: 400 }) // terug naar plat noord-boven
       fitToRoutes()
     }
+  },
+)
+// "Centreer op mij"-knop
+watch(
+  () => props.recenterSignal,
+  () => {
+    const m = map.value
+    if (m && meMarker) m.easeTo({ center: meMarker.getLngLat(), zoom: 15, duration: 300 })
   },
 )
 

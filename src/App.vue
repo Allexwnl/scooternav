@@ -123,6 +123,9 @@ const navDisplayPos = computed<LngLat | null>(() => {
   if (snapped && distM(pos.lng, pos.lat, snapped.lng, snapped.lat) < 60) return snapped
   return pos
 })
+const currentSpeed = ref<number | null>(null) // m/s, uit GPS
+const recenterSignal = ref(0)
+const navRemaining = ref<{ km: number; min: number } | null>(null)
 
 function currentLocation(): LngLat {
   if (myPos.value) return myPos.value
@@ -233,8 +236,12 @@ async function vote(stillThere: boolean) {
 }
 
 // --- Kaart-events ---
-function onPosition(p: LngLat) {
-  myPos.value = p
+function onPosition(p: { lng: number; lat: number; speed: number | null }) {
+  myPos.value = { lng: p.lng, lat: p.lat }
+  currentSpeed.value = p.speed
+}
+function recenter() {
+  recenterSignal.value++
 }
 function onSelectRoute(i: number) {
   selectedIndex.value = i
@@ -249,6 +256,8 @@ async function onPick(p: LngLat) {
     }
     return
   }
+  // Route al gekozen? Dan verandert een tik op de kaart de route NIET (gebruik "wissen" of zoeken).
+  if (destination.value) return
   destination.value = p
 }
 async function createClosure(a: LngLat, b: LngLat) {
@@ -426,11 +435,15 @@ function recomputeGuidance() {
   if (!pos || !route || route.coordinates.length < 2) {
     alert.value = null
     navStep.value = null
+    navRemaining.value = null
     return
   }
   const coords = route.coordinates
   const cum = cumulative(coords)
   const userDist = cum[nearestIndex(coords, pos.lng, pos.lat).idx]
+  const totalM = cum[cum.length - 1]
+  const remainM = Math.max(0, totalM - userDist)
+  navRemaining.value = { km: remainM / 1000, min: route.durationMin * (totalM > 0 ? remainM / totalM : 0) }
 
   // melding vóór je op de route
   let bestAlert: { emoji: string; label: string; meters: number } | null = null
@@ -535,6 +548,13 @@ function fmtDur(min: number): string {
   const m = Math.round(min % 60)
   return `${h} u ${m} min`
 }
+function arrivalTime(min: number): string {
+  const d = new Date(Date.now() + min * 60_000)
+  return d.toLocaleTimeString(settings.locale === 'en' ? 'en-GB' : 'nl-NL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 </script>
 
 <template>
@@ -557,8 +577,8 @@ function fmtDur(min: number): string {
     <div v-else ref="gbtn" class="gbtn"></div>
   </header>
 
-  <!-- Zoekbalk (verborgen tijdens navigatie) -->
-  <div v-if="!navMode" class="search">
+  <!-- Zoekbalk onderaan (Waze-stijl) — alleen als er nog geen route is -->
+  <div v-if="!navMode && !destination" class="search">
     <input
       v-model="searchQuery"
       type="search"
@@ -579,6 +599,7 @@ function fmtDur(min: number): string {
     :nav-position="navDisplayPos"
     :nav-active="navMode"
     :nav-bearing="navBearing"
+    :recenter-signal="recenterSignal"
     @position="onPosition"
     @pick="onPick"
     @select-route="onSelectRoute"
@@ -594,7 +615,7 @@ function fmtDur(min: number): string {
     {{ alert.emoji }} {{ alert.label }} · {{ t('in_meters', { m: Math.round(alert.meters / 10) * 10 }) }}
   </div>
 
-  <!-- Navigatie-overlay (third-person modus) -->
+  <!-- Navigatie-overlay (third-person modus, Waze-stijl) -->
   <div v-if="navMode" class="nav-overlay">
     <div class="nav-top">
       <div class="nav-instruction">
@@ -606,8 +627,20 @@ function fmtDur(min: number): string {
         {{ alert.emoji }} {{ alert.label }} · {{ t('in_meters', { m: Math.round(alert.meters / 10) * 10 }) }}
       </div>
     </div>
-    <button class="nav-stop" @click="stopNavigation">✕ {{ t('stop_nav') }}</button>
+    <div v-if="currentSpeed != null && currentSpeed >= 0" class="speed-pill">
+      {{ Math.round(currentSpeed * 3.6) }}<small>km/u</small>
+    </div>
+    <div class="nav-bottom">
+      <div class="nav-eta">
+        <strong v-if="navRemaining">{{ arrivalTime(navRemaining.min) }}</strong>
+        <span v-if="navRemaining">{{ Math.round(navRemaining.min) }} min · {{ navRemaining.km.toFixed(1) }} km</span>
+      </div>
+      <button class="nav-stop" @click="stopNavigation">✕ {{ t('stop_nav') }}</button>
+    </div>
   </div>
+
+  <!-- Centreer-op-mij-knop -->
+  <button v-if="navMode || !destination" class="fab-recenter" aria-label="Centreer" @click="recenter">◎</button>
 
   <div v-if="drawingClosure" class="report-banner">
     <span>{{ bannerText }}</span>
@@ -616,39 +649,32 @@ function fmtDur(min: number): string {
 
   <div v-if="toast" class="toast">{{ toast }}</div>
 
-  <div v-if="!navMode" class="panel">
-    <template v-if="!destination">
-      <p class="hint">{{ t('tap_destination') }}</p>
-      <p v-if="visibleReports.length" class="hint">📍 {{ visibleReports.length }} {{ t('reports_in_view') }}</p>
-    </template>
+  <div v-if="!navMode && destination" class="panel">
+    <div class="panel-head">
+      <strong>{{ t('routes') }}</strong>
+      <span class="approx">{{ settings.plate === 'blauw' ? t('snorfiets_approx') : t('bromfiets') }}</span>
+      <button class="link" @click="clearRoute">{{ t('clear') }}</button>
+    </div>
 
-    <template v-else>
-      <div class="panel-head">
-        <strong>{{ t('routes') }}</strong>
-        <span class="approx">{{ settings.plate === 'blauw' ? t('snorfiets_approx') : t('bromfiets') }}</span>
-        <button class="link" @click="clearRoute">{{ t('clear') }}</button>
-      </div>
-
-      <p v-if="loading" class="hint">{{ t('calculating') }}</p>
-      <p v-else-if="error" class="error">{{ error }}</p>
-      <ul v-else class="routes">
-        <li v-for="(r, i) in routes" :key="i" :class="{ active: i === selectedIndex }" @click="selectedIndex = i">
-          <span class="bar" :class="{ active: i === selectedIndex }"></span>
-          <span class="label">
-            {{ t('route') }} {{ i + 1 }}<em v-if="i === 0"> · {{ t('fastest') }}</em>
-            <span v-if="routeBlocked[i]" class="warn">⚠ {{ t('along_closure') }}</span>
-          </span>
-          <span class="meta">{{ r.distanceKm.toFixed(1) }} km · {{ fmtDur(r.durationMin) }}</span>
-        </li>
-      </ul>
-      <p v-if="routes.length && routeBlocked.length && routeBlocked.every((b) => b)" class="warn-note">
-        ⚠ {{ t('no_free_route') }}
-      </p>
-      <div v-if="routes.length && !loading" class="nav-actions">
-        <button class="go-btn" @click="startNavigation">▶ {{ t('start_nav') }}</button>
-        <button class="sim-btn" @click="startSim">🧪 {{ t('simulate') }}</button>
-      </div>
-    </template>
+    <p v-if="loading" class="hint">{{ t('calculating') }}</p>
+    <p v-else-if="error" class="error">{{ error }}</p>
+    <ul v-else class="routes">
+      <li v-for="(r, i) in routes" :key="i" :class="{ active: i === selectedIndex }" @click="selectedIndex = i">
+        <span class="bar" :class="{ active: i === selectedIndex }"></span>
+        <span class="label">
+          {{ t('route') }} {{ i + 1 }}<em v-if="i === 0"> · {{ t('fastest') }}</em>
+          <span v-if="routeBlocked[i]" class="warn">⚠ {{ t('along_closure') }}</span>
+        </span>
+        <span class="meta">{{ r.distanceKm.toFixed(1) }} km · {{ fmtDur(r.durationMin) }}</span>
+      </li>
+    </ul>
+    <p v-if="routes.length && routeBlocked.length && routeBlocked.every((b) => b)" class="warn-note">
+      ⚠ {{ t('no_free_route') }}
+    </p>
+    <div v-if="routes.length && !loading" class="nav-actions">
+      <button class="go-btn" @click="startNavigation">▶ {{ t('start_nav') }}</button>
+      <button class="sim-btn" @click="startSim">🧪 {{ t('simulate') }}</button>
+    </div>
   </div>
 
   <!-- Bevestig-popup -->
@@ -740,37 +766,38 @@ function fmtDur(min: number): string {
 }
 
 .search {
-  position: relative;
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  z-index: 500;
 }
 .search input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 14px 18px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.25);
 }
 .search .results {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0;
   position: absolute;
-  left: 10px;
-  right: 10px;
-  z-index: 500;
+  left: 0;
+  right: 0;
+  bottom: 58px; /* boven het zoekveld (pill staat onderaan) */
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 .search .results li {
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   font-size: 14px;
   border-bottom: 1px solid var(--border);
@@ -779,9 +806,29 @@ function fmtDur(min: number): string {
   border-bottom: 0;
 }
 .search .searching {
-  margin: 6px 2px 0;
+  position: absolute;
+  bottom: 58px;
+  left: 0;
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: 10px;
   font-size: 13px;
   color: var(--text-muted);
+}
+.fab-recenter {
+  position: fixed;
+  right: 12px;
+  bottom: 130px;
+  z-index: 550;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
 }
 
 .nav-banner {
@@ -1064,21 +1111,61 @@ function fmtDur(min: number): string {
   font-weight: 600;
   color: #ff8a80;
 }
-.nav-stop {
+.nav-bottom {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 0;
+  left: 0;
+  right: 0;
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(rgba(17, 17, 17, 0.82), #111);
+  color: #fff;
+}
+.nav-eta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.nav-eta strong {
+  font-size: 20px;
+}
+.nav-eta span {
+  font-size: 13px;
+  color: #cfd6dd;
+}
+.nav-stop {
   border: 0;
   background: #c62828;
   color: #fff;
-  padding: 14px 28px;
+  padding: 12px 22px;
   border-radius: 999px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   cursor: pointer;
+}
+.speed-pill {
+  position: absolute;
+  left: 14px;
+  bottom: 92px;
+  pointer-events: none;
+  background: #fff;
+  color: #111;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.speed-pill small {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #666;
 }
 
 .picker-overlay {
@@ -1102,28 +1189,32 @@ function fmtDur(min: number): string {
   margin-bottom: 10px;
 }
 .picker .types {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 .picker .types button {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 4px;
+  padding: 16px 10px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
+  text-align: center;
 }
 .picker .types .emoji {
-  font-size: 18px;
+  font-size: 28px;
+}
+.picker .types .t-label {
+  font-weight: 600;
 }
 .picker .types .t-hint {
-  margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 </style>
