@@ -82,6 +82,8 @@ const nl: Dict = {
   save_as_work: 'Bewaar als werk',
   saved: 'Opgeslagen ✓',
   too_fast: 'Te hard',
+  snap_to_road: 'Pijl op de weg vastzetten',
+  snap_hint: 'Aan = vloeiend op de weg (Waze-stijl). Uit = exacte ruwe GPS.',
 }
 
 const en: Dict = {
@@ -157,6 +159,8 @@ const en: Dict = {
   save_as_work: 'Save as work',
   saved: 'Saved ✓',
   too_fast: 'Too fast',
+  snap_to_road: 'Snap arrow to road',
+  snap_hint: 'On = smooth on-road (Waze-style). Off = exact raw GPS.',
 }
 
 const dicts: Record<Locale, Dict> = { nl, en }

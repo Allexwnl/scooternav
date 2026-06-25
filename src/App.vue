@@ -118,6 +118,7 @@ const navDisplayPos = computed<LngLat | null>(() => {
   if (!navMode.value) return null
   const pos = activePos.value
   if (!pos) return null
+  if (!settings.snapToRoad) return pos // exacte ruwe GPS (gebruiker-keuze)
   const route = routes.value[selectedIndex.value]
   if (!route || route.coordinates.length < 2) return pos
   const snapped = snapToPolyline(pos.lng, pos.lat, route.coordinates)

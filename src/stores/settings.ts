@@ -14,6 +14,7 @@ export interface Settings {
   hiddenTypes: ReportType[] // verborgen meldingtypes (filter)
   home: { lng: number; lat: number; label: string } | null
   work: { lng: number; lat: number; label: string } | null
+  snapToRoad: boolean // pijl op de weg vastzetten (aan) of exacte ruwe GPS tonen (uit)
 }
 
 const STORAGE_KEY = 'scooter-nav.settings'
@@ -27,6 +28,7 @@ const defaults: Settings = {
   hiddenTypes: [],
   home: null,
   work: null,
+  snapToRoad: true,
 }
 
 function load(): Settings {

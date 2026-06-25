@@ -80,6 +80,15 @@ function toggleType(tp: ReportType) {
       </section>
 
       <section>
+        <h4>{{ t('snap_to_road') }}</h4>
+        <div class="seg">
+          <button :class="{ active: settings.snapToRoad }" @click="settings.snapToRoad = true">{{ t('on') }}</button>
+          <button :class="{ active: !settings.snapToRoad }" @click="settings.snapToRoad = false">{{ t('off') }}</button>
+        </div>
+        <p class="hint-sm">{{ t('snap_hint') }}</p>
+      </section>
+
+      <section>
         <h4>{{ t('show_reports') }}</h4>
         <div class="checks">
           <label v-for="rt in REPORT_TYPES" :key="rt.type">
@@ -162,5 +171,10 @@ h4 {
   align-items: center;
   gap: 10px;
   cursor: pointer;
+}
+.hint-sm {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 </style>
