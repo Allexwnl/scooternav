@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MapView from './components/MapView.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import { createRoutingBackend, snapToRoad, cyclewayTransitions } from './services/routing'
@@ -26,6 +26,7 @@ const selectedIndex = ref(0)
 const loading = ref(false)
 const error = ref('')
 const showSettings = ref(false)
+const showMenu = ref(false)
 const gbtn = ref<HTMLDivElement | null>(null)
 
 const reports = ref<Report[]>([])
@@ -126,6 +127,10 @@ const navDisplayPos = computed<LngLat | null>(() => {
 const currentSpeed = ref<number | null>(null) // m/s, uit GPS
 const recenterSignal = ref(0)
 const navRemaining = ref<{ km: number; min: number } | null>(null)
+const speedLimit = computed(() => (settings.plate === 'blauw' ? 25 : 45)) // km/u per kenteken
+const overSpeed = computed(
+  () => currentSpeed.value != null && currentSpeed.value * 3.6 > speedLimit.value + 3,
+)
 
 function currentLocation(): LngLat {
   if (myPos.value) return myPos.value
@@ -243,6 +248,32 @@ function onPosition(p: { lng: number; lat: number; speed: number | null }) {
 function recenter() {
   recenterSignal.value++
 }
+
+async function openMenu() {
+  showMenu.value = true
+  if (!auth.user && GOOGLE_CLIENT_ID) {
+    await nextTick()
+    if (gbtn.value) renderButton(gbtn.value)
+  }
+}
+
+// Opgeslagen plekken (thuis/werk)
+function goTo(place: { lng: number; lat: number; label: string }) {
+  searchQuery.value = place.label
+  searchResults.value = []
+  destination.value = { lng: place.lng, lat: place.lat }
+}
+function saveAs(which: 'home' | 'work') {
+  if (!destination.value) return
+  const place = {
+    lng: destination.value.lng,
+    lat: destination.value.lat,
+    label: searchQuery.value || (which === 'home' ? t('home') : t('work')),
+  }
+  if (which === 'home') settings.home = place
+  else settings.work = place
+  showToast(`${which === 'home' ? '🏠' : '💼'} ${t('saved')}`)
+}
 function onSelectRoute(i: number) {
   selectedIndex.value = i
   void loadPathHints()
@@ -304,8 +335,7 @@ onMounted(async () => {
   pollTimer = window.setInterval(() => {
     if (lastBounds) fetchReports(lastBounds)
   }, 20_000)
-  await initAuth()
-  if (gbtn.value) renderButton(gbtn.value)
+  await initAuth() // GIS vast voorladen; de knop rendert wanneer het menu opent
 })
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
@@ -558,24 +588,15 @@ function arrivalTime(min: number): string {
 </script>
 
 <template>
-  <header class="topbar">
-    <span class="brand">🛵 {{ t('brand') }}</span>
-    <div class="toggle">
-      <button :class="{ active: settings.plate === 'blauw' }" @click="settings.plate = 'blauw'">
-        {{ t('plate_blue') }}
-      </button>
-      <button :class="{ active: settings.plate === 'geel' }" @click="settings.plate = 'geel'">
-        {{ t('plate_yellow') }}
-      </button>
-    </div>
-    <button class="act" :aria-label="t('report')" @click="onReportClick">➕</button>
-    <button class="act" :aria-label="t('settings')" @click="showSettings = true">⚙️</button>
-    <span v-if="auth.user" class="me" :title="auth.user.email">
-      <img v-if="auth.user.picture" :src="auth.user.picture" alt="" referrerpolicy="no-referrer" />
-      <button class="act" :aria-label="t('logout')" :title="t('logout')" @click="signOut">⎋</button>
-    </span>
-    <div v-else ref="gbtn" class="gbtn"></div>
-  </header>
+  <!-- Zwevende knoppen i.p.v. een topbar (map-first, Waze-stijl) -->
+  <button v-if="!navMode" class="fab-menu" :aria-label="t('menu')" @click="openMenu">☰</button>
+  <button v-if="!navMode" class="fab-report" :aria-label="t('report')" @click="onReportClick">➕</button>
+
+  <!-- Opgeslagen plekken (thuis/werk) -->
+  <div v-if="!navMode && !destination && (settings.home || settings.work)" class="quick-places">
+    <button v-if="settings.home" @click="goTo(settings.home)">🏠 {{ t('home') }}</button>
+    <button v-if="settings.work" @click="goTo(settings.work)">💼 {{ t('work') }}</button>
+  </div>
 
   <!-- Zoekbalk onderaan (Waze-stijl) — alleen als er nog geen route is -->
   <div v-if="!navMode && !destination" class="search">
@@ -627,9 +648,10 @@ function arrivalTime(min: number): string {
         {{ alert.emoji }} {{ alert.label }} · {{ t('in_meters', { m: Math.round(alert.meters / 10) * 10 }) }}
       </div>
     </div>
-    <div v-if="currentSpeed != null && currentSpeed >= 0" class="speed-pill">
+    <div v-if="currentSpeed != null && currentSpeed >= 0" class="speed-pill" :class="{ over: overSpeed }">
       {{ Math.round(currentSpeed * 3.6) }}<small>km/u</small>
     </div>
+    <div class="limit-sign">{{ speedLimit }}</div>
     <div class="nav-bottom">
       <div class="nav-eta">
         <strong v-if="navRemaining">{{ arrivalTime(navRemaining.min) }}</strong>
@@ -675,6 +697,10 @@ function arrivalTime(min: number): string {
       <button class="go-btn" @click="startNavigation">▶ {{ t('start_nav') }}</button>
       <button class="sim-btn" @click="startSim">🧪 {{ t('simulate') }}</button>
     </div>
+    <div v-if="routes.length && !loading" class="save-places">
+      <button @click="saveAs('home')">🏠 {{ t('save_as_home') }}</button>
+      <button @click="saveAs('work')">💼 {{ t('save_as_work') }}</button>
+    </div>
   </div>
 
   <!-- Bevestig-popup -->
@@ -703,6 +729,36 @@ function arrivalTime(min: number): string {
           <span class="t-hint">{{ rt.type === 'wegafsluiting' ? t('draw_on_map') : t('on_your_location') }}</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Menu (bottom-sheet, zelfde stijl als melden): login + kenteken + instellingen -->
+  <div v-if="showMenu" class="picker-overlay" @click.self="showMenu = false">
+    <div class="picker menu">
+      <strong>🛵 {{ t('brand') }}</strong>
+      <div class="menu-sec">
+        <h4>{{ t('account') }}</h4>
+        <div v-if="auth.user" class="menu-account">
+          <img v-if="auth.user.picture" :src="auth.user.picture" alt="" referrerpolicy="no-referrer" />
+          <span class="who">{{ auth.user.name || auth.user.email }}</span>
+          <button class="link" @click="signOut">{{ t('logout') }}</button>
+        </div>
+        <div v-else ref="gbtn"></div>
+      </div>
+      <div class="menu-sec">
+        <h4>{{ t('default_plate') }}</h4>
+        <div class="seg">
+          <button :class="{ active: settings.plate === 'blauw' }" @click="settings.plate = 'blauw'">
+            {{ t('plate_blue') }}
+          </button>
+          <button :class="{ active: settings.plate === 'geel' }" @click="settings.plate = 'geel'">
+            {{ t('plate_yellow') }}
+          </button>
+        </div>
+      </div>
+      <button class="menu-settings" @click="showMenu = false; showSettings = true">
+        ⚙️ {{ t('settings') }}
+      </button>
     </div>
   </div>
 
@@ -829,6 +885,157 @@ function arrivalTime(min: number): string {
   font-size: 22px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   cursor: pointer;
+}
+
+/* Zwevende knoppen (i.p.v. topbar) */
+.fab-menu,
+.fab-report {
+  position: fixed;
+  top: 14px;
+  z-index: 600;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 0;
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+.fab-menu {
+  left: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+.fab-report {
+  right: 14px;
+  background: #fb8c00; /* oranje, Waze-achtig */
+  color: #fff;
+}
+
+/* Menu bottom-sheet */
+.menu .menu-sec {
+  margin: 14px 0;
+}
+.menu h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.menu-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.menu-account img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+.menu-account .who {
+  flex: 1;
+  font-weight: 600;
+}
+.menu-account .link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.menu .seg {
+  display: flex;
+  gap: 8px;
+}
+.menu .seg button {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.menu .seg button.active {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--accent);
+  font-weight: 600;
+}
+.menu-settings {
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+/* Opgeslagen plekken-chips */
+.quick-places {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 78px;
+  z-index: 500;
+  display: flex;
+  gap: 8px;
+}
+.quick-places button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+}
+.save-places {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.save-places button {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* Snelheidslimiet-bord + te-hard-waarschuwing */
+.limit-sign {
+  position: absolute;
+  left: 92px;
+  bottom: 92px;
+  pointer-events: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  border: 4px solid #c62828;
+  color: #111;
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.speed-pill.over {
+  background: #c62828;
+  color: #fff;
+}
+.speed-pill.over small {
+  color: #ffe;
 }
 
 .nav-banner {

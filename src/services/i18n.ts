@@ -74,6 +74,14 @@ const nl: Dict = {
   rerouting: 'Route herberekenen…',
   cycle_on: 'Ga hier het fietspad op',
   cycle_off: 'Verlaat hier het fietspad',
+  menu: 'Menu',
+  account: 'Account',
+  home: 'Thuis',
+  work: 'Werk',
+  save_as_home: 'Bewaar als thuis',
+  save_as_work: 'Bewaar als werk',
+  saved: 'Opgeslagen ✓',
+  too_fast: 'Te hard',
 }
 
 const en: Dict = {
@@ -141,6 +149,14 @@ const en: Dict = {
   rerouting: 'Recalculating route…',
   cycle_on: 'Take the bike path here',
   cycle_off: 'Leave the bike path here',
+  menu: 'Menu',
+  account: 'Account',
+  home: 'Home',
+  work: 'Work',
+  save_as_home: 'Save as home',
+  save_as_work: 'Save as work',
+  saved: 'Saved ✓',
+  too_fast: 'Too fast',
 }
 
 const dicts: Record<Locale, Dict> = { nl, en }

@@ -12,6 +12,8 @@ export interface Settings {
   voice: boolean // gesproken navigatie-instructies
   keepAwake: boolean // scherm aan tijdens navigatie
   hiddenTypes: ReportType[] // verborgen meldingtypes (filter)
+  home: { lng: number; lat: number; label: string } | null
+  work: { lng: number; lat: number; label: string } | null
 }
 
 const STORAGE_KEY = 'scooter-nav.settings'
@@ -23,6 +25,8 @@ const defaults: Settings = {
   voice: true,
   keepAwake: true,
   hiddenTypes: [],
+  home: null,
+  work: null,
 }
 
 function load(): Settings {

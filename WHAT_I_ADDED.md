@@ -14,6 +14,11 @@ Een scooter-navigatie-app (blauw + geel kenteken) met **Waze-stijl community-mel
 navigatie met stem, en een veilige eigen backend met Google-login.
 
 ## Nieuw deze sessie (de eindsprint) ✨
+- ☰ **Menu-knop i.p.v. topbar**: één knop opent een bottom-sheet met **Google-login +
+  kenteken (blauw/geel) + instellingen**. Melden is een aparte oranje knop.
+- 🏠 **Opgeslagen plekken** (thuis/werk): bewaar een bestemming en navigeer er met één tik heen.
+- 🚦 **Snelheidslimiet-waarschuwing**: limietbord (25 blauw / 45 geel); de snelheids-pill
+  wordt **rood** als je te hard gaat.
 - 🟦 **Waze-style layout**: zoekbalk onderaan ("Waarheen?"), navigatie-onderbalk met
   **aankomsttijd + resterende tijd/afstand**, **snelheids-pill**, "centreer op mij"-knop,
   meld-grid (iconen-raster) en een richtingspijl.
