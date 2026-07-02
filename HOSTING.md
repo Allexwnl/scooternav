@@ -14,6 +14,44 @@ loopt (zie [VERDIENMODEL.md](./VERDIENMODEL.md)).
 
 ---
 
+## Nu: Render + Neon (gratis, één blueprint)
+
+De snelste gratis start — alles op één plek, geen VPS. **Render** host de API én de statische
+frontend; **Neon** is de (serverless) Postgres. De repo bevat al een `render.yaml`.
+
+> ⚠️ Op het gratis Render-plan valt de API na ~15 min inactiviteit in slaap → de eerste request
+> daarna duurt ~50s (koude start). Prima om te beginnen; upgrade of ga naar Hetzner als het loopt.
+
+**1. Neon-database aanmaken**
+1. https://neon.tech → nieuw project (regio **EU**, bv. Frankfurt).
+2. Kopieer de **"Pooled connection"**-string (host eindigt op `-pooler...`). Zorg dat er
+   `?sslmode=require` achter staat — dat verwacht Neon en `pg` schakelt er SSL mee in.
+3. Laad het schema één keer (lokaal, met de Neon-URL):
+   ```bash
+   psql "postgres://...neon.tech/neondb?sslmode=require" -f server/schema.sql
+   ```
+   (Of plak de inhoud van `server/schema.sql` in Neon's SQL-editor.)
+
+**2. Render-blueprint deployen**
+1. https://render.com → **New → Blueprint** → kies deze GitHub-repo. Render leest `render.yaml`
+   en maakt twee services: `sweetscoots-api` (Node) en `sweetscoots` (static).
+2. Vul de gevraagde `sync:false`-variabelen in:
+   - **sweetscoots-api** → `DATABASE_URL` (de Neon pooled-string), `GOOGLE_CLIENT_ID`,
+     en `CORS_ORIGIN` = de frontend-URL (bv. `https://sweetscoots.onrender.com`).
+   - **sweetscoots** → `VITE_API_URL` = de API-URL (bv. `https://sweetscoots-api.onrender.com`)
+     en `VITE_GOOGLE_CLIENT_ID` (zelfde waarde als `GOOGLE_CLIENT_ID`).
+3. De URL's ken je pas ná de eerste deploy → deploy eerst, vul dan `CORS_ORIGIN` en
+   `VITE_API_URL` in, en trigger een re-deploy (de frontend bakt `VITE_*` in bij de build).
+
+**3. Google OAuth**
+Voeg de frontend-URL toe bij Google Cloud → OAuth-client → *Authorized JavaScript origins*
+(zie [server/README.md](./server/README.md) "Auth"). Zonder dit is inloggen/stemmen uit (503).
+
+**Valhalla** blijft de publieke FOSSGIS-instance (staat al in `render.yaml`). Eigen Valhalla is
+te zwaar voor Render-free → dat gaat t.z.t. naar een VPS (zie hieronder).
+
+---
+
 ## Welke Hetzner
 
 Maak een account → **console**: https://console.hetzner.cloud
