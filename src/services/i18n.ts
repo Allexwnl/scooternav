@@ -5,7 +5,7 @@ import { settings, type Locale } from '../stores/settings'
 type Dict = Record<string, string>
 
 const nl: Dict = {
-  brand: 'Scooter-Nav',
+  brand: 'sweetscoots',
   plate_blue: 'Blauw · snor',
   plate_yellow: 'Geel · brom',
   report: 'Melden',
@@ -29,7 +29,7 @@ const nl: Dict = {
   sim_start: '▶ Simuleer rit (test alerts)',
   sim_stop: '⏹ Stop simulatie',
   // melden
-  what_to_report: 'Wat wil je melden?',
+  what_to_report: 'Wat zie je verderop?',
   on_your_location: 'op jouw locatie',
   draw_on_map: 'teken op de kaart',
   rt_politie: 'Politie',
@@ -56,6 +56,7 @@ const nl: Dict = {
   something_wrong: 'Er ging iets mis — probeer opnieuw',
   // settings
   theme: 'Thema',
+  theme_auto: '🌗 Auto',
   light: '☀️ Licht',
   dark: '🌙 Donker',
   language: 'Taal',
@@ -84,10 +85,42 @@ const nl: Dict = {
   too_fast: 'Te hard',
   snap_to_road: 'Pijl op de weg vastzetten',
   snap_hint: 'Aan = vloeiend op de weg (Waze-stijl). Uit = exacte ruwe GPS.',
+  // settings-groepen + profiel (ontwerp)
+  profile: 'Profiel',
+  app: 'App',
+  speed_warning: 'Snelheidswaarschuwing',
+  voice_sounds: 'Stem & geluiden',
+  guest: 'Gast',
+  sign_in_google: 'Inloggen met Google',
+  login_to_vote: '🔑 Log in om meldingen goed/af te keuren',
+  // route-kaart (ontwerp)
+  choose_route: 'Kies je route',
+  via_road: 'via de rijbaan',
+  via_cycle: 'rustig · via fietspad',
+  on_route: 'onderweg:',
+  route_clean: 'geen meldingen',
+  your_rides: 'Jouw ritten',
+  rides: 'ritten',
+  time_label: 'tijd',
+  controls_label: 'controles',
+  // verdienmodel
+  support: '☕ Steun sweetscoots',
+  map_credit: 'Kaart © OpenStreetMap-bijdragers · OpenMapTiles · OpenFreeMap',
+  // rij-modus (glanceable) + ETA delen
+  drive_mode: 'Rij-modus',
+  share_eta: '📤 Deel ETA',
+  eta_share_text: 'Ik ben er om {time} 🛵 — via sweetscoots',
+  // onboarding (lege kaart)
+  welcome_title: 'Welkom bij sweetscoots 🛵',
+  welcome_body:
+    'Navigatie voor scooters in Purmerend. Meld politie, controles en afsluitingen — en zie wat anderen melden. De kaart vult zich zodra jij en je vrienden meldingen plaatsen.',
+  invite_group: '📣 Nodig je groep uit',
+  got_it: 'Aan de slag',
+  invite_text: 'Rij je scooter in Purmerend? Gebruik sweetscoots — meldingen van politie & controles onderweg:',
 }
 
 const en: Dict = {
-  brand: 'Scooter-Nav',
+  brand: 'sweetscoots',
   plate_blue: 'Blue · moped',
   plate_yellow: 'Yellow · scooter',
   report: 'Report',
@@ -110,7 +143,7 @@ const en: Dict = {
   no_free_route: 'No route found that fully avoids the closure.',
   sim_start: '▶ Simulate ride (test alerts)',
   sim_stop: '⏹ Stop simulation',
-  what_to_report: 'What do you want to report?',
+  what_to_report: 'What is up ahead?',
   on_your_location: 'at your location',
   draw_on_map: 'draw on the map',
   rt_politie: 'Police',
@@ -134,6 +167,7 @@ const en: Dict = {
   login_needed: '🔑 Sign in with Google to take part',
   something_wrong: 'Something went wrong — try again',
   theme: 'Theme',
+  theme_auto: '🌗 Auto',
   light: '☀️ Light',
   dark: '🌙 Dark',
   language: 'Language',
@@ -161,6 +195,33 @@ const en: Dict = {
   too_fast: 'Too fast',
   snap_to_road: 'Snap arrow to road',
   snap_hint: 'On = smooth on-road (Waze-style). Off = exact raw GPS.',
+  profile: 'Profile',
+  app: 'App',
+  speed_warning: 'Speed warning',
+  voice_sounds: 'Voice & sounds',
+  guest: 'Guest',
+  sign_in_google: 'Sign in with Google',
+  login_to_vote: '🔑 Sign in to approve/reject reports',
+  choose_route: 'Choose your route',
+  via_road: 'via the road',
+  via_cycle: 'calm · via cycle path',
+  on_route: 'on the way:',
+  route_clean: 'no reports',
+  your_rides: 'Your rides',
+  rides: 'rides',
+  time_label: 'time',
+  controls_label: 'checks',
+  support: '☕ Support sweetscoots',
+  map_credit: 'Map © OpenStreetMap contributors · OpenMapTiles · OpenFreeMap',
+  drive_mode: 'Drive mode',
+  share_eta: '📤 Share ETA',
+  eta_share_text: "I'll arrive at {time} 🛵 — via sweetscoots",
+  welcome_title: 'Welcome to sweetscoots 🛵',
+  welcome_body:
+    'Scooter navigation for Purmerend. Report police, checks and closures — and see what others report. The map fills up as you and your friends drop reports.',
+  invite_group: '📣 Invite your group',
+  got_it: 'Get started',
+  invite_text: 'Ride a scooter in Purmerend? Use sweetscoots — police & check alerts on the go:',
 }
 
 const dicts: Record<Locale, Dict> = { nl, en }

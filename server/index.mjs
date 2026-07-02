@@ -25,6 +25,16 @@ const MAX_PATH_POINTS = 1000
 const RESULT_LIMIT = 1000
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Meldingen verlopen per type (Waze-stijl: controles kort, wegdek/afsluiting lang).
+// SQL-interval o.b.v. r.type; hergebruikt in /reports (verbergen) én de opruiming (verwijderen).
+// De 👎-stem (report_votes) haalt fout-geraden duur eerder weg; dit is de bovengrens.
+const TTL_EXPR = `now() - (case r.type
+  when 'hulpdienst' then interval '30 minutes'
+  when 'politie' then interval '2 hours'
+  when 'rollerbank' then interval '2 hours'
+  when 'wegafsluiting' then interval '3 days'
+  else interval '7 days' end)`  // else = gevaarlijk_wegdek
+
 const app = express()
 app.set('trust proxy', 1)
 app.use(express.json({ limit: '64kb' }))
@@ -111,6 +121,7 @@ app.get('/reports', async (req, res) => {
         coalesce(count(v.*) filter (where v.still_there = false), 0) as denials
        from reports r left join report_votes v on v.report_id = r.id
        where r.lng between $1 and $3 and r.lat between $2 and $4
+         and r.created_at > ${TTL_EXPR}
        group by r.id limit ${RESULT_LIMIT}`,
       [b.minLng, b.minLat, b.maxLng, b.maxLat],
     )
@@ -122,8 +133,9 @@ app.get('/reports', async (req, res) => {
   }
 })
 
-// Schrijven: login vereist.
-app.post('/reports', writeLimiter, requireAuth, async (req, res) => {
+// Melden: GEEN login nodig (alleen rate-limit tegen misbruik). Login is pas
+// vereist om meldingen goed/af te keuren (zie /vote).
+app.post('/reports', writeLimiter, async (req, res) => {
   const { type, lng, lat, path } = req.body ?? {}
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'ongeldig type' })
   if (!validLngLat(lng, lat)) return res.status(400).json({ error: 'ongeldige coördinaten' })
@@ -141,7 +153,7 @@ app.post('/reports', writeLimiter, requireAuth, async (req, res) => {
   }
 })
 
-// Stemmen: login vereist; stem-id = Google-sub (server-bepaald, NIET door client opgegeven).
+// Stemmen (goed/afkeuren): login vereist; stem-id = Google-sub (server-bepaald, NIET door client opgegeven).
 app.post('/reports/:id/vote', writeLimiter, requireAuth, async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'ongeldige id' })
   const { stillThere } = req.body ?? {}
@@ -158,5 +170,22 @@ app.post('/reports/:id/vote', writeLimiter, requireAuth, async (req, res) => {
     res.status(500).json({ error: 'database' })
   }
 })
+
+// Opruiming: verlopen meldingen echt verwijderen (cascade ruimt stemmen mee op).
+// Elk uur + één keer bij start. ponytail: setInterval volstaat; cron pas als er
+// meerdere server-instances draaien die elkaar dubbel werk geven.
+async function purgeExpired() {
+  try {
+    const { rowCount } = await pool.query(`delete from reports r where r.created_at < ${TTL_EXPR}`)
+    if (rowCount) {
+      cache.clear()
+      console.log(`Opruiming: ${rowCount} verlopen melding(en) verwijderd`)
+    }
+  } catch (e) {
+    console.error('Opruiming mislukt:', e.message)
+  }
+}
+setInterval(purgeExpired, 60 * 60_000).unref()
+purgeExpired()
 
 app.listen(PORT, () => console.log(`Scooter-Nav API draait op poort ${PORT}`))

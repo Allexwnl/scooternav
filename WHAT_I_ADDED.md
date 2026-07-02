@@ -1,6 +1,6 @@
 # Wat er is toegevoegd — overzicht
 
-Dit is je samenvatting van Scooter-Nav: wat de app nu kan, wat er deze sessie bij kwam,
+Dit is je samenvatting van sweetscoots: wat de app nu kan, wat er deze sessie bij kwam,
 hoe het beveiligd is, en wat jíj nog moet doen. Diepere docs: [ROADMAP.md](./ROADMAP.md) ·
 [HANDOVER.md](./HANDOVER.md) · [server/README.md](./server/README.md) ·
 [server/SECURITY.md](./server/SECURITY.md) · [CAPACITOR.md](./CAPACITOR.md) ·

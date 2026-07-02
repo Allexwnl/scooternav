@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { Map as MlMap, Marker, NavigationControl, LngLatBounds } from 'maplibre-gl'
+import { Map as MlMap, Marker, LngLatBounds } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { MAP_STYLE_URL, PURMEREND_CENTER, DEFAULT_ZOOM } from '../config'
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, PURMEREND_CENTER, DEFAULT_ZOOM } from '../config'
+import { isDark } from '../stores/settings'
 import { createLocationProvider } from '../services/location'
 import type { Route, LngLat } from '../services/routing'
 import type { Report, ReportType, BoundingBox } from '../services/reports'
@@ -15,6 +16,7 @@ const props = defineProps<{
   navPosition: LngLat | null
   navActive: boolean
   navBearing: number
+  navZoom: number
   recenterSignal: number
 }>()
 
@@ -47,17 +49,63 @@ const REPORT_EMOJI: Record<ReportType, string> = {
   wegafsluiting: '🚧',
 }
 
+function styleForTheme(): string {
+  return isDark.value ? MAP_STYLE_DARK : MAP_STYLE_LIGHT
+}
+
+// Route- en afsluitingslagen (her)toevoegen. Wordt aangeroepen bij het laden én na een
+// stijlwissel (setStyle wist toegevoegde sources/layers; DOM-markers blijven wel staan).
+function addOverlays(m: MlMap) {
+  m.addSource('routes', { type: 'geojson', data: EMPTY_FC as never })
+  m.addLayer({
+    id: 'routes-line',
+    type: 'line',
+    source: 'routes',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-sort-key': ['case', ['get', 'selected'], 1, 0],
+    },
+    paint: {
+      'line-color': ['case', ['get', 'selected'], '#12a06a', '#9aa0a6'],
+      'line-width': ['case', ['get', 'selected'], 7, 4],
+      'line-opacity': ['case', ['get', 'selected'], 1, 0.65],
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
+
+  m.addSource('closures', { type: 'geojson', data: EMPTY_FC as never })
+  m.addLayer({
+    id: 'closures-line',
+    type: 'line',
+    source: 'closures',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#e53935',
+      'line-width': 6,
+      'line-dasharray': [1.5, 1],
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
+
+  styleReady = true
+  drawRoutes()
+  drawClosures()
+}
+
 onMounted(() => {
   if (!mapContainer.value) return
 
   const m = new MlMap({
     container: mapContainer.value,
-    style: MAP_STYLE_URL,
+    style: styleForTheme(),
     center: PURMEREND_CENTER,
     zoom: DEFAULT_ZOOM,
+    attributionControl: false, // geen attributie op de kaart (credit staat in het menu)
   })
   map.value = m
-  m.addControl(new NavigationControl(), 'top-right')
+  // Geen zoom-/kompasknoppen (botsten met de meld-knop en staan niet in het ontwerp;
+  // pinch-to-zoom + de centreer-knop volstaan).
 
   // Stille placeholder voor ontbrekende sprite-icoontjes in de kaartstijl
   // (voorkomt "Image ... could not be loaded"-waarschuwingen).
@@ -66,41 +114,7 @@ onMounted(() => {
   })
 
   m.on('load', () => {
-    styleReady = true
-
-    // Routes
-    m.addSource('routes', { type: 'geojson', data: EMPTY_FC as never })
-    m.addLayer({
-      id: 'routes-line',
-      type: 'line',
-      source: 'routes',
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-        'line-sort-key': ['case', ['get', 'selected'], 1, 0],
-      },
-      paint: {
-        'line-color': ['case', ['get', 'selected'], '#1e88e5', '#9aa0a6'],
-        'line-width': ['case', ['get', 'selected'], 7, 4],
-        'line-opacity': ['case', ['get', 'selected'], 1, 0.65],
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
-
-    // Wegafsluitingen — rode lijn (van–tot), Waze-stijl, boven de routes.
-    m.addSource('closures', { type: 'geojson', data: EMPTY_FC as never })
-    m.addLayer({
-      id: 'closures-line',
-      type: 'line',
-      source: 'closures',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: {
-        'line-color': '#e53935',
-        'line-width': 6,
-        'line-dasharray': [1.5, 1],
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
+    addOverlays(m)
 
     m.on('click', 'routes-line', (e) => {
       const idx = e.features?.[0]?.properties?.index
@@ -271,6 +285,7 @@ watch(
 let navAnimId: number | null = null
 let navCur: { lng: number; lat: number } | null = null
 let navCurBearing = 0
+let navCurZoom = 16
 
 function navFrame() {
   const m = map.value
@@ -284,20 +299,21 @@ function navFrame() {
     el.className = 'nav-dot'
     navMarker = new Marker({ element: el })
   }
-  navMarker.addTo(m)
   if (!navCur) navCur = { lng: target.lng, lat: target.lat }
   navCur.lng += (target.lng - navCur.lng) * 0.18
   navCur.lat += (target.lat - navCur.lat) * 0.18
   const diff = ((props.navBearing - navCurBearing + 540) % 360) - 180 // kortste hoek
   navCurBearing = (navCurBearing + diff * 0.18 + 360) % 360
-  navMarker.setLngLat([navCur.lng, navCur.lat])
-  m.setCenter([navCur.lng, navCur.lat])
-  m.setBearing(navCurBearing)
+  navCurZoom += (props.navZoom - navCurZoom) * 0.05 // traag mee-zoomen met de snelheid
+  navMarker.setLngLat([navCur.lng, navCur.lat]).addTo(m) // positie vóór addTo (anders crash)
+  // Eén jumpTo i.p.v. losse setCenter+setBearing+zoom → één render per frame = vloeiender.
+  m.jumpTo({ center: [navCur.lng, navCur.lat], bearing: navCurBearing, zoom: navCurZoom })
   navAnimId = requestAnimationFrame(navFrame)
 }
 function startNavAnim() {
   navCur = null
   navCurBearing = props.navBearing
+  navCurZoom = props.navZoom
   if (navAnimId == null) navAnimId = requestAnimationFrame(navFrame)
 }
 function stopNavAnim() {
@@ -314,7 +330,9 @@ watch(
     const m = map.value
     if (!m) return
     if (on) {
-      m.easeTo({ pitch: 60, zoom: 17, duration: 500 }) // third-person; daarna volgt de animatie
+      // 45° kanteling bij start (Waze-stijl). De zoom is snelheids-afhankelijk (navZoom);
+      // navFrame zoomt er daarna vloeiend naartoe.
+      m.easeTo({ pitch: 45, zoom: props.navZoom, duration: 500 })
       startNavAnim()
     } else {
       stopNavAnim()
@@ -329,6 +347,18 @@ watch(
   () => {
     const m = map.value
     if (m && meMarker) m.easeTo({ center: meMarker.getLngLat(), zoom: 15, duration: 300 })
+  },
+)
+// Kaartstijl meewisselen met het thema (licht "Sorbet" ↔ donker "Midnight").
+// setStyle behoudt de camera; DOM-markers blijven; alleen onze lagen moeten terug.
+watch(
+  isDark,
+  () => {
+    const m = map.value
+    if (!m) return
+    styleReady = false
+    m.setStyle(styleForTheme())
+    m.once('style.load', () => addOverlays(m))
   },
 )
 

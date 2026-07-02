@@ -1,4 +1,4 @@
-# Scooter-Navigatie — Roadmap
+# sweetscootsigatie — Roadmap
 
 > **Visie:** een navigatie-app die écht weet hoe een scooter rijdt — voor zowel
 > **blauw kenteken (snorfiets, 25 km/u)** als **geel kenteken (bromfiets, 45 km/u)** —

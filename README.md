@@ -1,4 +1,4 @@
-# Scooter-Nav
+# sweetscoots
 
 Navigatie-app voor scooters (blauw + geel kenteken) met community-meldingen
 (politie, **rollerbank**, hulpdiensten, gevaarlijk wegdek, wegafsluitingen).

@@ -1,6 +1,6 @@
 # HANDOVER — alles zelf draaien (zonder hulp)
 
-Naslag om Scooter-Nav zelfstandig te beheren: draaien, back-uppen, beveiligen en problemen
+Naslag om sweetscoots zelfstandig te beheren: draaien, back-uppen, beveiligen en problemen
 oplossen. Plan: [ROADMAP.md](./ROADMAP.md). Server + beveiliging: [`server/README.md`](./server/README.md)
 en [`server/SECURITY.md`](./server/SECURITY.md).
 

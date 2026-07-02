@@ -1,22 +1,33 @@
 :root {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 
-  /* Thema-tokens (licht). Donker zet ze hieronder om. */
+  /* Thema-tokens — "Sorbet" (licht, fris groen). Donker = "Midnight" hieronder. */
+  --bg: #f4faf5;
   --surface: #ffffff;
-  --surface-2: #f1f7fe;
-  --text: #1a1a1a;
-  --text-muted: #555;
-  --border: #e3e3e3;
-  --accent: #1e88e5;
+  --surface-2: #eaf5ed;
+  --text: #122019;
+  --text-muted: #5b6b62;
+  --border: #e0ece5;
+  --accent: #117a55; /* diepgroen */
+  --on-accent: #ffffff;
+  --route: #12a06a; /* route/stip op de kaart */
 }
 
 :root[data-theme='dark'] {
-  --surface: #1c1f23;
-  --surface-2: #243140;
-  --text: #f0f0f0;
-  --text-muted: #aeb6c0;
-  --border: #333a42;
-  --accent: #4aa3ff;
+  /* "Midnight" — donker & premium met lime accent */
+  --bg: #0b1311;
+  --surface: #141d1a;
+  --surface-2: #1c2823;
+  --text: #eaf2ec;
+  --text-muted: #9fb2a7;
+  --border: #283631;
+  --accent: #b4ee5a; /* lime */
+  --on-accent: #0c150d;
+  --route: #b4ee5a;
+}
+
+body {
+  background: var(--bg);
 }
 
 * {
@@ -42,9 +53,9 @@ body,
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #1e88e5;
+  background: var(--route);
   border: 3px solid #fff;
-  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.4);
+  box-shadow: 0 0 0 2px rgba(18, 160, 106, 0.4);
 }
 
 /* Bestemmings-pin (📍). */
@@ -62,7 +73,7 @@ body,
   height: 0;
   border-left: 11px solid transparent;
   border-right: 11px solid transparent;
-  border-bottom: 22px solid #1e88e5;
+  border-bottom: 22px solid var(--route);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
 }
 

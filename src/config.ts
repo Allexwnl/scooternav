@@ -1,9 +1,13 @@
 // Centrale config — pas hier de kaartstijl en het startpunt aan.
 
-// Keyless kaartstijl via OpenFreeMap (geen account/sleutel nodig).
-// MapTiler gebruiken? Zet VITE_MAP_STYLE_URL in .env naar je MapTiler-style-URL incl. ?key=...
-export const MAP_STYLE_URL =
-  import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty'
+// Eigen, zelf-gehoste kaartstijlen (100% legaal voor commercieel gebruik, €0/mnd).
+// Ontwerp = OpenMapTiles Positron (licht "Sorbet") / Dark Matter (donker "Midnight"),
+// BSD-3 + CC-BY; tegels/fonts/sprites komen van OpenFreeMap (gratis, keyless, óók
+// commercieel). Licht ge-brand met sweetscoots-groen op fietspaden/parken.
+// Eigen stijl? Zet VITE_MAP_STYLE_URL in .env (geldt dan voor licht én donker).
+const ENV_STYLE = import.meta.env.VITE_MAP_STYLE_URL
+export const MAP_STYLE_LIGHT = ENV_STYLE || '/map-styles/sweetscoots-light.json'
+export const MAP_STYLE_DARK = ENV_STYLE || '/map-styles/sweetscoots-dark.json'
 
 // Startpunt: centrum van Purmerend. LET OP: MapLibre verwacht [lng, lat].
 export const PURMEREND_CENTER: [number, number] = [4.9597, 52.5052]

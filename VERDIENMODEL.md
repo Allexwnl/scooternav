@@ -1,8 +1,13 @@
-# Verdiensplan — Scooter-Nav
+# Verdienmodel — sweetscoots
 
 Concreet, gefaseerd plan. Kern: **eerst gratis groeien via de WhatsApp-groep, daarna
 freemium, advertenties pas bij schaal.** Onderscheid = de scooter-niche (kenteken-routes +
 rollerbank), niet "live verkeer" (dat heeft Waze, jij niet — zie [WAZE_VERGELIJKING.md](./WAZE_VERGELIJKING.md)).
+
+> **Geld verdienen zónder gebruikers te verliezen** is de hele opzet: melden en navigeren
+> blijven altijd gratis én zonder account (login is pas nodig om meldingen goed/af te keuren).
+> Je verdient aan *extra* waarde (Plus, donaties, later ads bij stilstand) — nooit door de
+> gratis basis uit te kleden of een betaalmuur voor de kernfunctie te zetten.
 
 ## Wat moet je dekken (kosten)
 | Post | Kosten |
@@ -21,7 +26,7 @@ rollerbank), niet "live verkeer" (dat heeft Waze, jij niet — zie [WAZE_VERGELI
 - Verwachte opbrengst: **€0–50/mnd** (donaties).
 
 ## Fase 2 — Groeien (~1k → 10k): **FREEMIUM** ⭐
-Gratis blijft volwaardig; **"Scooter-Nav Plus"** voor wie meer wil:
+Gratis blijft volwaardig; **"sweetscoots Plus"** voor wie meer wil:
 - Suggestie-prijs: **€1,99/mnd**, **€14,99/jaar**, of eenmalig **€9,99**.
 - Plus-functies (premium-waarde, niet de basis uitkleden):
   - offline kaarten, geen advertenties, extra stemmen/thema's,
@@ -45,7 +50,8 @@ Gratis blijft volwaardig; **"Scooter-Nav Plus"** voor wie meer wil:
 | 3 | 10k+ | ads + B2B (+freemium) | echte omzet |
 
 ## Concrete eerste stappen
-1. Voeg een **donatie-knop** toe (Tikkie-link of Buy Me a Coffee) — nul werk, dekt de server.
+1. ✅ **Donatie-knop** zit in het menu ("☕ Steun sweetscoots") — zet de `href` in `App.vue`
+   naar je eigen Tikkie / Buy Me a Coffee-link. Nul werk, dekt de server.
 2. Bouw de **premium-haakjes** alvast in (een `isPlus`-vlag achter de Google-login), zodat
    Plus later een kwestie is van features ontgrendelen.
 3. Houd **kosten laag**: blijf op de gratis tiers tot het echt loopt.

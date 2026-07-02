@@ -14,6 +14,7 @@ import { cumulative, nearestIndex, pointAtDistance, distM, snapToPolyline } from
 import { enableWakeLock, disableWakeLock } from './services/wakeLock'
 import { geocode, type GeoResult } from './services/geocoding'
 import { t } from './services/i18n'
+import { loadStats, addRide } from './services/rideStats'
 
 const routing = createRoutingBackend()
 const reportsBackend = createReportsBackend()
@@ -33,11 +34,33 @@ const reports = ref<Report[]>([])
 const selectedReport = ref<Report | null>(null)
 const deviceId = getDeviceId()
 const votedIds = ref<string[]>([])
+const promptedPassed = ref<string[]>([]) // meldingen waarvoor de passeer-prompt al is getoond
+const stats = ref(loadStats()) // rit-totalen (localStorage)
+let navStartMs = 0 // starttijd van een echte rit (0 = geen/simulatie)
+const rideControls = ref(0) // gepasseerde controles deze rit
 let lastBounds: BoundingBox | null = null
 let pollTimer: number | undefined
 
 // Alleen niet-gefilterde meldingen tonen (instelling).
 const visibleReports = computed(() => reports.value.filter((r) => !settings.hiddenTypes.includes(r.type)))
+
+// Welke meldingtypes liggen op elke route? Toont in de routekeuze welke route "schoon"
+// is (bv. de ⚙️-controle mijdt). ponytail: naïeve scan, prima bij ≤3 routes.
+const routeReports = computed(() =>
+  routes.value.map((route) => {
+    const seen = new Set<ReportType>()
+    if (route.coordinates.length < 2) return [] as { emoji: string; label: string }[]
+    const out: { emoji: string; label: string }[] = []
+    for (const r of visibleReports.value) {
+      if (seen.has(r.type)) continue
+      if (nearestIndex(route.coordinates, r.lng, r.lat).dist <= ON_ROUTE_M) {
+        seen.add(r.type)
+        out.push({ emoji: emojiFor(r.type), label: labelFor(r.type) })
+      }
+    }
+    return out
+  }),
+)
 
 // --- Zoeken (geocoding) ---
 const searchQuery = ref('')
@@ -97,7 +120,6 @@ function labelFor(type: ReportType): string {
 }
 
 // --- Navigatie-alerts + turn-by-turn (B4 + Fase 3) ---
-const ALERT_DISTANCE_M = 1000
 const ON_ROUTE_M = 45
 const alert = ref<{ emoji: string; label: string; meters: number } | null>(null)
 const navStep = ref<{ text: string; meters: number } | null>(null)
@@ -130,8 +152,51 @@ const recenterSignal = ref(0)
 const navRemaining = ref<{ km: number; min: number } | null>(null)
 const speedLimit = computed(() => (settings.plate === 'blauw' ? 25 : 45)) // km/u per kenteken
 const overSpeed = computed(
-  () => currentSpeed.value != null && currentSpeed.value * 3.6 > speedLimit.value + 3,
+  () =>
+    settings.speedWarning &&
+    currentSpeed.value != null &&
+    currentSpeed.value * 3.6 > speedLimit.value + 3,
 )
+// Snelheids-afhankelijke navigatiezoom: sneller rijden → verder uitzoomen (meer weg vooruit).
+// ponytail: lineair m/s → zoom, geklemd. Pas de factor/grenzen aan als het te traag/snel zoomt.
+const navZoom = computed(() => {
+  const ms = currentSpeed.value ?? 0
+  return Math.max(14, Math.min(16.8, 17 - ms * 0.12))
+})
+// Waarschuwingsafstand tijd-gebaseerd: ~3 min vooruit, zodat je bij 45 km/u eerder
+// gewaarschuwd wordt dan bij 25 km/u. Stilstand/langzaam → vaste 800 m.
+// ponytail: geklemd 250–2500 m; pas 180 s aan als het te vroeg/laat waarschuwt.
+const alertDistance = computed(() => {
+  const ms = currentSpeed.value ?? 0
+  return ms < 2 ? 800 : Math.max(250, Math.min(2500, ms * 180))
+})
+
+// --- Rij-modus (glanceable) + ETA delen ---
+const glance = ref(false)
+const canShare = typeof navigator !== 'undefined' && !!navigator.share
+async function shareEta() {
+  if (!navRemaining.value || !navigator.share) return
+  try {
+    await navigator.share({ text: t('eta_share_text', { time: arrivalTime(navRemaining.value.min) }) })
+  } catch {
+    /* gebruiker annuleerde delen */
+  }
+}
+function dismissOnboarding() {
+  settings.onboarded = true
+}
+async function inviteGroup() {
+  const url = window.location.origin
+  try {
+    if (navigator.share) await navigator.share({ text: t('invite_text'), url })
+    else {
+      await navigator.clipboard.writeText(`${t('invite_text')} ${url}`)
+      showToast(t('saved'))
+    }
+  } catch {
+    /* geannuleerd */
+  }
+}
 
 function currentLocation(): LngLat {
   if (myPos.value) return myPos.value
@@ -182,14 +247,9 @@ function speak(text: string) {
   }
 }
 
-// --- Stemmen ---
-// Melden vereist inloggen (accountability) zodra login is geconfigureerd.
+// --- Melden ---
+// Melden mag iedereen (geen login). Login is pas nodig om te stemmen (zie vote()).
 function onReportClick() {
-  if (GOOGLE_CLIENT_ID && !auth.user) {
-    showToast(t('login_needed'))
-    signIn()
-    return
-  }
   showTypePicker.value = true
 }
 
@@ -221,6 +281,12 @@ function onSelectReport(id: string) {
 }
 async function vote(stillThere: boolean) {
   if (!selectedReport.value || hasVoted.value) return
+  // Goed-/afkeuren vereist inloggen (accountability).
+  if (GOOGLE_CLIENT_ID && !auth.user) {
+    showToast(t('login_to_vote'))
+    signIn()
+    return
+  }
   const id = selectedReport.value.id
   const wasClosure = selectedReport.value.type === 'wegafsluiting'
   try {
@@ -252,6 +318,7 @@ function recenter() {
 
 async function openMenu() {
   showMenu.value = true
+  stats.value = loadStats()
   if (!auth.user && GOOGLE_CLIENT_ID) {
     await nextTick()
     if (gbtn.value) renderButton(gbtn.value)
@@ -482,11 +549,28 @@ function recomputeGuidance() {
     const ri = nearestIndex(coords, r.lng, r.lat)
     if (ri.dist > ON_ROUTE_M) continue
     const ahead = cum[ri.idx] - userDist
-    if (ahead > 5 && ahead <= ALERT_DISTANCE_M && (!bestAlert || ahead < bestAlert.meters)) {
+    if (ahead > 5 && ahead <= alertDistance.value && (!bestAlert || ahead < bestAlert.meters)) {
       bestAlert = { emoji: emojiFor(r.type), label: labelFor(r.type), meters: ahead }
     }
   }
   alert.value = bestAlert
+
+  // Net gepasseerd? Toon één keer de "staat het er nog?"-prompt (koppelt B3-bevestigen
+  // aan B4-onderweg). Hergebruikt de bestaande bevestig-kaart + vote()-flow.
+  if (navMode.value && !selectedReport.value && !showTypePicker.value && !drawingClosure.value) {
+    for (const r of visibleReports.value) {
+      if (votedIds.value.includes(r.id) || promptedPassed.value.includes(r.id)) continue
+      const ri = nearestIndex(coords, r.lng, r.lat)
+      if (ri.dist > ON_ROUTE_M) continue
+      const behind = userDist - cum[ri.idx]
+      if (behind > 8 && behind < 70) {
+        promptedPassed.value = [...promptedPassed.value, r.id]
+        if (r.type === 'politie' || r.type === 'rollerbank') rideControls.value++
+        selectedReport.value = r
+        break
+      }
+    }
+  }
 
   // volgende afslag / fietspad-overgang (turn-by-turn)
   const guide = [...route.steps, ...pathHints.value]
@@ -528,6 +612,8 @@ function startNavigation() {
   navMode.value = true
   lastSpoken = -1
   prevNavPos = null
+  navStartMs = Date.now()
+  rideControls.value = 0
   if (settings.keepAwake) void enableWakeLock()
 }
 function startSim() {
@@ -540,6 +626,8 @@ function startSim() {
   navMode.value = true
   lastSpoken = -1
   prevNavPos = null
+  navStartMs = 0 // simulatie telt niet mee in de statistieken
+  rideControls.value = 0
   if (settings.keepAwake) void enableWakeLock()
   simPos.value = { lng: coords[0][0], lat: coords[0][1] }
   let meters = 0
@@ -554,6 +642,14 @@ function startSim() {
   }, 200)
 }
 function stopNavigation() {
+  // Echte rit afronden → optellen bij de totalen (simulatie: navStartMs = 0, wordt overgeslagen).
+  if (navStartMs) {
+    const route = routes.value[selectedIndex.value]
+    const km = route ? Math.max(0, route.distanceKm - (navRemaining.value?.km ?? 0)) : 0
+    const minutes = (Date.now() - navStartMs) / 60000
+    if (km > 0.05 || minutes > 0.5) stats.value = addRide(km, minutes, rideControls.value)
+    navStartMs = 0
+  }
   navMode.value = false
   simulating.value = false
   if (simTimer) clearInterval(simTimer)
@@ -591,10 +687,13 @@ function arrivalTime(min: number): string {
 <template>
   <!-- Zwevende knoppen i.p.v. een topbar (map-first, Waze-stijl) -->
   <button v-if="!navMode" class="fab-menu" :aria-label="t('menu')" @click="openMenu">☰</button>
-  <button v-if="!navMode" class="fab-report" :aria-label="t('report')" @click="onReportClick">➕</button>
+  <button v-if="!navMode && !destination" class="fab-report" :aria-label="t('report')" @click="onReportClick">+</button>
 
   <!-- Opgeslagen plekken (thuis/werk) -->
-  <div v-if="!navMode && !destination && (settings.home || settings.work)" class="quick-places">
+  <div
+    v-if="!navMode && !destination && !searchResults.length && (settings.home || settings.work)"
+    class="quick-places"
+  >
     <button v-if="settings.home" @click="goTo(settings.home)">🏠 {{ t('home') }}</button>
     <button v-if="settings.work" @click="goTo(settings.work)">💼 {{ t('work') }}</button>
   </div>
@@ -621,6 +720,7 @@ function arrivalTime(min: number): string {
     :nav-position="navDisplayPos"
     :nav-active="navMode"
     :nav-bearing="navBearing"
+    :nav-zoom="navZoom"
     :recenter-signal="recenterSignal"
     @position="onPosition"
     @pick="onPick"
@@ -629,17 +729,17 @@ function arrivalTime(min: number): string {
     @bounds="onBounds"
   />
 
-  <!-- Volgende afslag / melding (buiten nav-modus; in nav-modus toont de overlay dit) -->
-  <div v-if="navStep && !navMode" class="nav-banner">
-    ➡️ {{ navStep.text }} · {{ t('in_meters', { m: Math.round(navStep.meters / 10) * 10 }) }}
-  </div>
-  <div v-if="alert && !navMode" class="alert-banner" :class="{ stacked: !!navStep }">
+  <!-- Melding-alert buiten nav-modus (in nav-modus toont de overlay dit) -->
+  <div v-if="alert && !navMode" class="alert-banner">
     {{ alert.emoji }} {{ alert.label }} · {{ t('in_meters', { m: Math.round(alert.meters / 10) * 10 }) }}
   </div>
 
   <!-- Navigatie-overlay (third-person modus, Waze-stijl) -->
-  <div v-if="navMode" class="nav-overlay">
+  <div v-if="navMode" class="nav-overlay" :class="{ glance }">
     <div class="nav-top">
+      <button class="glance-toggle" :aria-label="t('drive_mode')" @click="glance = !glance">
+        {{ glance ? '🔎−' : '🔎+' }}
+      </button>
       <div class="nav-instruction">
         <span v-if="navStep">➡️ {{ navStep.text }}</span>
         <span v-else>🏁 {{ t('arrive') }}</span>
@@ -658,6 +758,7 @@ function arrivalTime(min: number): string {
         <strong v-if="navRemaining">{{ arrivalTime(navRemaining.min) }}</strong>
         <span v-if="navRemaining">{{ Math.round(navRemaining.min) }} min · {{ navRemaining.km.toFixed(1) }} km</span>
       </div>
+      <button v-if="canShare && navRemaining" class="nav-share" :aria-label="t('share_eta')" @click="shareEta">📤</button>
       <button class="nav-stop" @click="stopNavigation">✕ {{ t('stop_nav') }}</button>
     </div>
   </div>
@@ -674,8 +775,7 @@ function arrivalTime(min: number): string {
 
   <div v-if="!navMode && destination" class="panel">
     <div class="panel-head">
-      <strong>{{ t('routes') }}</strong>
-      <span class="approx">{{ settings.plate === 'blauw' ? t('snorfiets_approx') : t('bromfiets') }}</span>
+      <strong>{{ t('choose_route') }}</strong>
       <button class="link" @click="clearRoute">{{ t('clear') }}</button>
     </div>
 
@@ -684,11 +784,20 @@ function arrivalTime(min: number): string {
     <ul v-else class="routes">
       <li v-for="(r, i) in routes" :key="i" :class="{ active: i === selectedIndex }" @click="selectedIndex = i">
         <span class="bar" :class="{ active: i === selectedIndex }"></span>
-        <span class="label">
-          {{ t('route') }} {{ i + 1 }}<em v-if="i === 0"> · {{ t('fastest') }}</em>
+        <span class="rinfo">
+          <span class="dur">{{ fmtDur(r.durationMin) }}</span>
+          <span class="sub">
+            {{ r.distanceKm.toFixed(1) }} km<em v-if="i === 0"> · {{ t('fastest') }}</em>
+            · {{ i === 0 ? t('via_road') : t('via_cycle') }}
+          </span>
           <span v-if="routeBlocked[i]" class="warn">⚠ {{ t('along_closure') }}</span>
+          <span v-if="routeReports[i]?.length" class="onroute">
+            {{ t('on_route') }}
+            <span v-for="a in routeReports[i]" :key="a.label" :title="a.label">{{ a.emoji }}</span>
+          </span>
+          <span v-else class="onroute clean">✓ {{ t('route_clean') }}</span>
         </span>
-        <span class="meta">{{ r.distanceKm.toFixed(1) }} km · {{ fmtDur(r.durationMin) }}</span>
+        <span class="plate" :class="settings.plate">{{ settings.plate }}</span>
       </li>
     </ul>
     <p v-if="routes.length && routeBlocked.length && routeBlocked.every((b) => b)" class="warn-note">
@@ -736,7 +845,7 @@ function arrivalTime(min: number): string {
   <!-- Menu (bottom-sheet, zelfde stijl als melden): login + kenteken + instellingen -->
   <div v-if="showMenu" class="picker-overlay" @click.self="showMenu = false">
     <div class="picker menu">
-      <strong>🛵 {{ t('brand') }}</strong>
+      <strong>🌱 {{ t('brand') }}</strong>
       <div class="menu-sec">
         <h4>{{ t('account') }}</h4>
         <div v-if="auth.user" class="menu-account">
@@ -757,13 +866,37 @@ function arrivalTime(min: number): string {
           </button>
         </div>
       </div>
+      <div v-if="stats.rides" class="menu-sec">
+        <h4>{{ t('your_rides') }}</h4>
+        <div class="stats">
+          <div><strong>{{ stats.rides }}</strong><span>{{ t('rides') }}</span></div>
+          <div><strong>{{ stats.km.toFixed(0) }}</strong><span>km</span></div>
+          <div><strong>{{ fmtDur(stats.minutes) }}</strong><span>{{ t('time_label') }}</span></div>
+          <div><strong>{{ stats.controls }}</strong><span>{{ t('controls_label') }}</span></div>
+        </div>
+      </div>
       <button class="menu-settings" @click="showMenu = false; showSettings = true">
         ⚙️ {{ t('settings') }}
       </button>
+      <!-- ponytail: donatie-link (Fase 1 verdienmodel). Vervang href door je eigen Tikkie/BMC-link. -->
+      <a class="menu-support" href="https://buymeacoffee.com/sweetscoots" target="_blank" rel="noopener">
+        {{ t('support') }}
+      </a>
+      <p class="menu-credit">{{ t('map_credit') }}</p>
     </div>
   </div>
 
   <SettingsPanel v-if="showSettings" @close="showSettings = false" />
+
+  <!-- Onboarding: eerste keer, kaart is nog leeg → uitleg + groep uitnodigen -->
+  <div v-if="!settings.onboarded" class="picker-overlay onboarding" @click.self="dismissOnboarding">
+    <div class="picker welcome">
+      <strong>{{ t('welcome_title') }}</strong>
+      <p>{{ t('welcome_body') }}</p>
+      <button class="invite-btn" @click="inviteGroup">{{ t('invite_group') }}</button>
+      <button class="got-it" @click="dismissOnboarding">{{ t('got_it') }}</button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -824,9 +957,9 @@ function arrivalTime(min: number): string {
 
 .search {
   position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: 16px;
+  left: 72px; /* ruimte voor de menu-knop linksboven */
+  right: 14px;
+  top: 14px;
   z-index: 500;
 }
 .search input {
@@ -846,7 +979,7 @@ function arrivalTime(min: number): string {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 58px; /* boven het zoekveld (pill staat onderaan) */
+  top: 58px; /* onder het zoekveld (zoekbalk staat bovenaan) */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -864,7 +997,7 @@ function arrivalTime(min: number): string {
 }
 .search .searching {
   position: absolute;
-  bottom: 58px;
+  top: 58px;
   left: 0;
   background: var(--surface);
   padding: 8px 12px;
@@ -874,8 +1007,8 @@ function arrivalTime(min: number): string {
 }
 .fab-recenter {
   position: fixed;
-  right: 12px;
-  bottom: 130px;
+  right: 16px;
+  bottom: 96px; /* op één lijn met de snelheids-pill tijdens navigatie, boven de meld-knop */
   z-index: 550;
   width: 46px;
   height: 46px;
@@ -892,25 +1025,37 @@ function arrivalTime(min: number): string {
 .fab-menu,
 .fab-report {
   position: fixed;
-  top: 14px;
   z-index: 600;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fab-menu {
+  top: 14px;
+  left: 14px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  border: 0;
   font-size: 22px;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-.fab-menu {
-  left: 14px;
   background: var(--surface);
   color: var(--text);
 }
+/* Meld-knop: groot, rechtsonder, in de groene huisstijl (i.p.v. oranje) */
 .fab-report {
-  right: 14px;
-  background: #fb8c00; /* oranje, Waze-achtig */
-  color: #fff;
+  right: 16px;
+  bottom: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 36px;
+  font-weight: 300;
+  line-height: 1;
+  padding-bottom: 4px; /* optisch centreren van de "+" */
 }
 
 /* Menu bottom-sheet */
@@ -963,6 +1108,27 @@ function arrivalTime(min: number): string {
   color: var(--accent);
   font-weight: 600;
 }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.stats div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+.stats strong {
+  font-size: 18px;
+}
+.stats span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 .menu-settings {
   width: 100%;
   margin-top: 6px;
@@ -974,13 +1140,31 @@ function arrivalTime(min: number): string {
   cursor: pointer;
   font-size: 15px;
 }
+.menu-support {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+}
+.menu-credit {
+  margin: 12px 2px 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
 /* Opgeslagen plekken-chips */
 .quick-places {
   position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: 78px;
+  left: 72px; /* onder de zoekbalk (bovenaan), naast de menu-knop */
+  right: 14px;
+  top: 72px;
   z-index: 500;
   display: flex;
   gap: 8px;
@@ -1015,8 +1199,8 @@ function arrivalTime(min: number): string {
 /* Snelheidslimiet-bord + te-hard-waarschuwing */
 .limit-sign {
   position: absolute;
-  left: 92px;
-  bottom: 92px;
+  left: 74px;
+  bottom: 96px; /* zelfde lijn als snelheids-pill + centreer-knop */
   pointer-events: none;
   width: 44px;
   height: 44px;
@@ -1039,21 +1223,6 @@ function arrivalTime(min: number): string {
   color: #ffe;
 }
 
-.nav-banner {
-  position: fixed;
-  top: 104px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 620;
-  background: #1e88e5;
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  max-width: 90%;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
 .alert-banner {
   position: fixed;
   top: 104px;
@@ -1067,9 +1236,6 @@ function arrivalTime(min: number): string {
   font-size: 15px;
   font-weight: 600;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
-.alert-banner.stacked {
-  top: 152px;
 }
 .report-banner {
   position: fixed;
@@ -1150,12 +1316,15 @@ function arrivalTime(min: number): string {
   font-size: 15px;
 }
 .cc-actions .yes {
-  background: #e8f5e9;
-  border-color: #a5d6a7;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  font-weight: 700;
 }
 .cc-actions .no {
-  background: #ffebee;
-  border-color: #ef9a9a;
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
 }
 .cc-voted {
   margin: 6px 2px 0;
@@ -1233,24 +1402,57 @@ function arrivalTime(min: number): string {
 .routes .bar.active {
   background: var(--accent);
 }
-.routes .label {
-  font-weight: 600;
+.routes .rinfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.routes .label em {
-  font-weight: 400;
+.routes .dur {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.routes .sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.routes .sub em {
   font-style: normal;
+  font-weight: 600;
   color: var(--accent);
 }
-.routes .label .warn {
-  display: block;
-  font-weight: 400;
+.routes .warn {
   font-size: 12px;
   color: #e5534b;
 }
-.routes .meta {
+.routes .onroute {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.routes .onroute span {
+  margin-left: 2px;
+}
+.routes .onroute.clean {
+  color: var(--accent);
+  font-weight: 600;
+}
+.routes .plate {
   margin-left: auto;
-  color: var(--text);
-  font-size: 14px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.routes .plate.geel {
+  background: #ffd54a;
+  color: #3a2e00;
+}
+.routes .plate.blauw {
+  background: #4f5bd5;
+  color: #fff;
 }
 .warn-note {
   margin: 8px 2px 0;
@@ -1264,14 +1466,14 @@ function arrivalTime(min: number): string {
 }
 .go-btn {
   flex: 2;
-  padding: 12px;
+  padding: 14px;
   border: 0;
   background: var(--accent);
-  color: #fff;
-  border-radius: 10px;
+  color: var(--on-accent);
+  border-radius: 999px;
   cursor: pointer;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
 }
 .sim-btn {
   flex: 1;
@@ -1358,7 +1560,7 @@ function arrivalTime(min: number): string {
 .speed-pill {
   position: absolute;
   left: 14px;
-  bottom: 92px;
+  bottom: 96px; /* zelfde lijn als limiet-bord + centreer-knop */
   pointer-events: none;
   background: #fff;
   color: #111;
@@ -1416,7 +1618,14 @@ function arrivalTime(min: number): string {
   text-align: center;
 }
 .picker .types .emoji {
-  font-size: 28px;
+  font-size: 26px;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
 }
 .picker .types .t-label {
   font-weight: 600;
@@ -1424,5 +1633,86 @@ function arrivalTime(min: number): string {
 .picker .types .t-hint {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* Rij-modus (glanceable): grote volgende-afslag + afstand, rest minder opdringerig */
+.glance-toggle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  pointer-events: auto;
+  border: 0;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 15px;
+  cursor: pointer;
+}
+.nav-overlay.glance .nav-instruction {
+  font-size: 34px;
+  line-height: 1.15;
+}
+.nav-overlay.glance .nav-instruction .dist {
+  font-size: 26px;
+}
+.nav-overlay.glance .nav-top {
+  padding: 22px 16px 28px;
+}
+.nav-overlay.glance .nav-alert {
+  font-size: 20px;
+}
+.nav-share {
+  border: 0;
+  background: #37474f;
+  color: #fff;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+/* Onboarding-welkom */
+.onboarding {
+  align-items: center;
+}
+.welcome {
+  width: min(420px, 92vw);
+  border-radius: 16px;
+  text-align: center;
+}
+.welcome > strong {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+.welcome p {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.welcome .invite-btn {
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.welcome .got-it {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
 }
 </style>
