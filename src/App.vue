@@ -446,7 +446,12 @@ async function compute() {
     void loadPathHints()
     if (result.length === 0) error.value = t('no_route')
   } catch (e) {
-    error.value = `${t('no_route')} (${(e as Error).message})`
+    // 5xx/gateway/netwerk = routeserver onbereikbaar (bv. publieke Valhalla plat) → nette
+    // melding i.p.v. de rauwe nginx-HTML. Andere fouten tonen we mét details.
+    const msg = (e as Error).message
+    error.value = /\b50[234]\b|Bad Gateway|Failed to fetch|NetworkError/i.test(msg)
+      ? t('route_server_down')
+      : `${t('no_route')} (${msg})`
     routes.value = []
     routeBlocked.value = []
   } finally {
