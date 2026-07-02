@@ -1,6 +1,6 @@
-# Render Blueprint — sweetscoots (API + statische frontend). Postgres draait op Neon.
-# Deploy: Render → New → Blueprint → kies deze repo. Vul daarna de sync:false-waardes
-# in (Neon-URL, Google client-id, en de kruislingse service-URL's). Zie HOSTING.md.
+# Render Blueprint — sweetscoots API. Frontend draait op Netlify, Postgres op Neon.
+# Deploy: Render → New → Blueprint → kies deze repo. Vul daarna de sync:false-waardes in.
+# Zie HOSTING.md.
 #
 # Regio frankfurt = EU (GDPR + lage latency NL). plan free = gratis, maar de API valt
 # na ~15 min inactiviteit in slaap (koude start ~50s bij de eerste request daarna).
@@ -19,29 +19,7 @@ services:
       - key: DATABASE_URL
         sync: false # Neon "pooled" connection string, met ?sslmode=require
       - key: GOOGLE_CLIENT_ID
-        sync: false # zelfde waarde als VITE_GOOGLE_CLIENT_ID hieronder
+        sync: false # zelfde waarde als VITE_GOOGLE_CLIENT_ID op Netlify
       - key: CORS_ORIGIN
-        sync: false # de URL van de frontend hieronder (bv. https://sweetscoots.onrender.com)
+        sync: false # de Netlify-URL, bv. https://scooternav.netlify.app (zonder trailing slash)
       # PORT wordt automatisch door Render gezet; de server leest process.env.PORT.
-
-  # --- Frontend (Vite-build) → statische site ---
-  - name: sweetscoots
-    type: web
-    runtime: static
-    # (static sites hebben geen 'plan' — ze zijn altijd gratis)
-    # --include=dev: Render zet NODE_ENV=production, anders ontbreken vue-tsc/vite (devDeps).
-    buildCommand: npm ci --include=dev && npm run build
-    staticPublishPath: ./dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      - key: VITE_REPORTS_BACKEND
-        value: api
-      - key: VITE_VALHALLA_URL
-        value: https://valhalla1.openstreetmap.de # publieke FOSSGIS; eigen Valhalla = later
-      - key: VITE_API_URL
-        sync: false # de URL van sweetscoots-api hierboven (bv. https://sweetscoots-api.onrender.com)
-      - key: VITE_GOOGLE_CLIENT_ID
-        sync: false # zelfde waarde als GOOGLE_CLIENT_ID op de API

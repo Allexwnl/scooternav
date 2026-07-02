@@ -14,41 +14,50 @@ loopt (zie [VERDIENMODEL.md](./VERDIENMODEL.md)).
 
 ---
 
-## Nu: Render + Neon (gratis, één blueprint)
+## Nu: Netlify + Render + Neon (gratis)
 
-De snelste gratis start — alles op één plek, geen VPS. **Render** host de API én de statische
-frontend; **Neon** is de (serverless) Postgres. De repo bevat al een `render.yaml`.
+De snelste gratis start, geen VPS: **Netlify** = frontend (Vite-build), **Render** = API
+(`server/`), **Neon** = (serverless) Postgres. De repo bevat `render.yaml` (API) en
+`netlify.toml` (frontend + Valhalla-proxy).
 
 > ⚠️ Op het gratis Render-plan valt de API na ~15 min inactiviteit in slaap → de eerste request
 > daarna duurt ~50s (koude start). Prima om te beginnen; upgrade of ga naar Hetzner als het loopt.
 
-**1. Neon-database aanmaken**
+**1. Neon-database**
 1. https://neon.tech → nieuw project (regio **EU**, bv. Frankfurt).
-2. Kopieer de **"Pooled connection"**-string (host eindigt op `-pooler...`). Zorg dat er
-   `?sslmode=require` achter staat — dat verwacht Neon en `pg` schakelt er SSL mee in.
-3. Laad het schema één keer (lokaal, met de Neon-URL):
+2. Kopieer de **"Pooled connection"**-string (host eindigt op `-pooler...`), met `?sslmode=require`
+   erachter — dat verwacht Neon en `pg` schakelt er SSL mee in.
+3. Laad het schema één keer:
    ```bash
    psql "postgres://...neon.tech/neondb?sslmode=require" -f server/schema.sql
    ```
-   (Of plak de inhoud van `server/schema.sql` in Neon's SQL-editor.)
+   (Of plak `server/schema.sql` in Neon's SQL-editor.)
 
-**2. Render-blueprint deployen**
-1. https://render.com → **New → Blueprint** → kies deze GitHub-repo. Render leest `render.yaml`
-   en maakt twee services: `sweetscoots-api` (Node) en `sweetscoots` (static).
-2. Vul de gevraagde `sync:false`-variabelen in:
-   - **sweetscoots-api** → `DATABASE_URL` (de Neon pooled-string), `GOOGLE_CLIENT_ID`,
-     en `CORS_ORIGIN` = de frontend-URL (bv. `https://sweetscoots.onrender.com`).
-   - **sweetscoots** → `VITE_API_URL` = de API-URL (bv. `https://sweetscoots-api.onrender.com`)
-     en `VITE_GOOGLE_CLIENT_ID` (zelfde waarde als `GOOGLE_CLIENT_ID`).
-3. De URL's ken je pas ná de eerste deploy → deploy eerst, vul dan `CORS_ORIGIN` en
-   `VITE_API_URL` in, en trigger een re-deploy (de frontend bakt `VITE_*` in bij de build).
+**2. API → Render (blueprint)**
+1. https://render.com → **New → Blueprint** → kies deze repo. Render leest `render.yaml` en maakt
+   de service `sweetscoots-api`.
+2. Vul de `sync:false`-variabelen in:
+   - `DATABASE_URL` = de Neon pooled-string
+   - `GOOGLE_CLIENT_ID` = je Google OAuth **Client ID** (`…apps.googleusercontent.com`)
+   - `CORS_ORIGIN` = je Netlify-URL, **zonder** trailing slash: `https://scooternav.netlify.app`
+     (de server knipt een `/` er sowieso af, maar netjes is netjes).
+3. Na de deploy heb je de API-URL, bv. `https://sweetscoots-api.onrender.com`.
 
-**3. Google OAuth**
-Voeg de frontend-URL toe bij Google Cloud → OAuth-client → *Authorized JavaScript origins*
+**3. Frontend → Netlify**
+Environment variables (Site settings → Environment):
+- `VITE_REPORTS_BACKEND` = `api`
+- `VITE_API_URL` = je Render-API-URL (bv. `https://sweetscoots-api.onrender.com`)
+- `VITE_GOOGLE_CLIENT_ID` = **dezelfde** waarde als `GOOGLE_CLIENT_ID`
+- `VITE_VALHALLA_URL` = `/valhalla` — **niet** de FOSSGIS-URL direct! FOSSGIS stuurt geen
+  CORS-headers, dus `netlify.toml` proxyt `/valhalla` same-origin naar FOSSGIS.
+- Daarna **opnieuw deployen** (Vite bakt `VITE_*` in tijdens de build).
+
+**4. Google OAuth**
+Google Cloud → OAuth-client → *Authorized JavaScript origins* → voeg je Netlify-URL toe
 (zie [server/README.md](./server/README.md) "Auth"). Zonder dit is inloggen/stemmen uit (503).
 
-**Valhalla** blijft de publieke FOSSGIS-instance (staat al in `render.yaml`). Eigen Valhalla is
-te zwaar voor Render-free → dat gaat t.z.t. naar een VPS (zie hieronder).
+**Valhalla** = publieke FOSSGIS via de Netlify-proxy. Eigen Valhalla is te zwaar voor deze
+gratis opzet → dat gaat t.z.t. naar een VPS (zie hieronder).
 
 ---
 

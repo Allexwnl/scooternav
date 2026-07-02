@@ -1,0 +1,13 @@
+# Netlify — frontend-build + proxy's (dezelfde rol als de Vite-dev-proxy in vite.config.ts).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Valhalla (routing): de publieke FOSSGIS-instance stuurt GEEN CORS-headers, dus de browser
+# mag 'm niet direct aanroepen. Netlify proxyt 'm same-origin op /valhalla → zet in de app
+# VITE_VALHALLA_URL=/valhalla (of laat 'm leeg; dat is de default in config.ts).
+[[redirects]]
+  from = "/valhalla/*"
+  to = "https://valhalla1.openstreetmap.de/:splat"
+  status = 200
+  force = true

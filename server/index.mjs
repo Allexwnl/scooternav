@@ -38,7 +38,12 @@ const TTL_EXPR = `now() - (case r.type
 const app = express()
 app.set('trust proxy', 1)
 app.use(express.json({ limit: '64kb' }))
-app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true }))
+// CORS: alleen de eigen frontend(s). Trailing slash/spaties afknippen — een origin is
+// nooit "https://site/" maar "https://site"; anders faalt de exacte match stil.
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim().replace(/\/+$/, ''))
+  : true
+app.use(cors({ origin: corsOrigins }))
 
 const readLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false })
 const writeLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true, legacyHeaders: false })
