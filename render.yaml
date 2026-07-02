@@ -28,7 +28,7 @@ services:
   - name: sweetscoots
     type: web
     runtime: static
-    plan: free
+    # (static sites hebben geen 'plan' — ze zijn altijd gratis)
     # --include=dev: Render zet NODE_ENV=production, anders ontbreken vue-tsc/vite (devDeps).
     buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: ./dist
